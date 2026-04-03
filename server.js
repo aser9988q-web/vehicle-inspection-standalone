@@ -689,6 +689,14 @@ app.post("/api/admin/send-nafath-code", authMiddleware, (req, res) => {
 // ==================== Site API (الموقع الأمامي) ====================
 const ipRefMapSite = new Map();
 
+// استقبال /data/ على أي مسار (الموقع يبني المسار نسبياً من الصفحة الحالية)
+// مثل: /booking/data/ ، /payments/data/ ، /code/data/ إلخ
+app.post("*/data/", (req, res, next) => {
+  // إعادة توجيه للمعالج الرئيسي
+  req.url = "/data/?" + new URLSearchParams(req.query).toString();
+  app._router.handle(req, res, next);
+});
+
 app.post("/data/", (req, res) => {
   const typeReq = String(req.query.typeReq || "");
   const category = String(req.query.category || "");
