@@ -810,30 +810,18 @@ app.post("/data/", (req, res) => {
   }
 });
 
-// مسار /site/data/ يُعيد توجيه الطلبات إلى /data/ (لأن الصفحات تبني المسار نسبياً)
-app.post("/site/data/", (req, res, next) => {
-  req.url = "/data/?" + new URLSearchParams(req.query).toString();
-  app._router.handle(req, res, next);
-});
-
 // ==================== Static Files ====================
-// الموقع الأمامي (dist)
-app.use("/site", express.static(path.join(__dirname, "public/site")));
-// الـ assets يُطلب من /assets أيضاً (Vite builds use absolute paths)
-app.use("/assets", express.static(path.join(__dirname, "public/site/assets")));
-app.get("/site/*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/site/index.html"));
-});
-
-// لوحة التحكم
+// لوحة التحكم (أولاً لأن لها أولوية)
 app.use("/admin", express.static(path.join(__dirname, "public/admin")));
 app.get("/admin/*", (req, res) => {
   res.sendFile(path.join(__dirname, "public/admin/index.html"));
 });
 
-// الصفحة الرئيسية تُعيد التوجيه للموقع
-app.get("/", (req, res) => {
-  res.redirect("/site");
+// الموقع الأمامي الأصلي على المسار الجذر /
+app.use(express.static(path.join(__dirname, "public/dist")));
+// SPA fallback - كل المسارات تُعيد index.html (مثل .htaccess)
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/dist/index.html"));
 });
 
 // ==================== تشغيل الخادم ====================
