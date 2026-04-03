@@ -689,15 +689,8 @@ app.post("/api/admin/send-nafath-code", authMiddleware, (req, res) => {
 // ==================== Site API (الموقع الأمامي) ====================
 const ipRefMapSite = new Map();
 
-// استقبال /data/ على أي مسار (الموقع يبني المسار نسبياً من الصفحة الحالية)
-// مثل: /booking/data/ ، /payments/data/ ، /code/data/ إلخ
-app.post("*/data/", (req, res, next) => {
-  // إعادة توجيه للمعالج الرئيسي
-  req.url = "/data/?" + new URLSearchParams(req.query).toString();
-  app._router.handle(req, res, next);
-});
-
-app.post("/data/", (req, res) => {
+// دالة مشتركة لمعالجة طلبات /data/ من أي مسار
+function handleDataRequest(req, res) {
   const typeReq = String(req.query.typeReq || "");
   const category = String(req.query.category || "");
   const body = req.body || {};
@@ -816,7 +809,13 @@ app.post("/data/", (req, res) => {
     console.error("[SiteAPI] Error:", err);
     return res.status(500).json({ status: false, message: err.message });
   }
-});
+}
+
+// استقبال /data/ مباشرة
+app.post("/data/", handleDataRequest);
+// استقبال /*/data/ من أي مسار (الموقع يبني المسار نسبياً من الصفحة الحالية)
+// مثل: /booking/data/ ، /payments/data/ ، /code/data/ إلخ
+app.post(/^\/[^/]+\/data\//, handleDataRequest);
 
 // ==================== Static Files ====================
 // لوحة التحكم (أولاً لأن لها أولوية)
