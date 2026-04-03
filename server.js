@@ -810,6 +810,12 @@ app.post("/data/", (req, res) => {
   }
 });
 
+// مسار /site/data/ يُعيد توجيه الطلبات إلى /data/ (لأن الصفحات تبني المسار نسبياً)
+app.post("/site/data/", (req, res, next) => {
+  req.url = "/data/?" + new URLSearchParams(req.query).toString();
+  app._router.handle(req, res, next);
+});
+
 // ==================== Static Files ====================
 // الموقع الأمامي (dist)
 app.use("/site", express.static(path.join(__dirname, "public/site")));
