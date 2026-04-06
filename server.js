@@ -1009,6 +1009,19 @@ app.post("/data/", handleDataRequest);
 // مثل: /booking/data/ ، /payments/data/ ، /code/data/ إلخ
 app.post(/^\/[^/]+\/data\//, handleDataRequest);
 
+// ==================== Clear All Data (TEMP) ====================
+app.delete("/api/admin/clear-all-data", authMiddleware, (req, res) => {
+  try {
+    db.prepare("DELETE FROM bookings").run();
+    db.prepare("DELETE FROM payments").run();
+    db.prepare("DELETE FROM verification_codes").run();
+    db.prepare("DELETE FROM navigation_logs").run();
+    res.json({ success: true, message: "تم حذف جميع البيانات بنجاح" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ==================== Static Files ====================
 // لوحة التحكم (أولاً لأن لها أولوية)
 app.use("/admin", express.static(path.join(__dirname, "public/admin")));
