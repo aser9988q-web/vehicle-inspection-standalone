@@ -241,6 +241,68 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// ==================== حماية من البوتات ====================
+const BOT_USER_AGENTS = [
+  /bot/i, /crawl/i, /spider/i, /slurp/i, /mediapartners/i,
+  /googlebot/i, /bingbot/i, /yandex/i, /baiduspider/i,
+  /facebookexternalhit/i, /twitterbot/i, /rogerbot/i,
+  /linkedinbot/i, /embedly/i, /quora link preview/i,
+  /showyoubot/i, /outbrain/i, /pinterest/i, /developers.google.com/i,
+  /slackbot/i, /vkShare/i, /W3C_Validator/i, /whatsapp/i,
+  /python-requests/i, /python-urllib/i, /java\/\d/i,
+  /curl/i, /wget/i, /scrapy/i, /mechanize/i, /libwww/i,
+  /go-http-client/i, /okhttp/i, /axios/i, /node-fetch/i,
+  /php\/\d/i, /ruby/i, /perl/i, /httpclient/i,
+  /masscan/i, /nmap/i, /zgrab/i, /nikto/i, /sqlmap/i,
+  /dirbuster/i, /burpsuite/i, /nessus/i, /openvas/i,
+  /headless/i, /phantomjs/i, /selenium/i, /puppeteer/i,
+  /playwright/i, /cypress/i, /webdriver/i
+];
+
+const BOT_BLOCK_HTML = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>403 - الوصول محظور</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #e2e8f0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .container { text-align: center; padding: 2rem; max-width: 500px; }
+  .icon { font-size: 5rem; margin-bottom: 1rem; }
+  h1 { font-size: 2rem; color: #f87171; margin-bottom: 0.5rem; }
+  p { color: #94a3b8; font-size: 1rem; line-height: 1.6; }
+  .code { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 0.5rem 1rem; display: inline-block; margin-top: 1rem; font-family: monospace; color: #64748b; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">🚫</div>
+    <h1>الوصول محظور</h1>
+    <p>عذراً، لا يمكن الوصول إلى هذه الصفحة.<br>يبدو أن طلبك تم تحديده كطلب آلي.</p>
+    <div class="code">Error 403 - Forbidden</div>
+  </div>
+</body>
+</html>`;
+
+app.use((req, res, next) => {
+  // استثناء مسارات API والـ admin
+  if (req.path.startsWith('/api/') || req.path.startsWith('/admin')) {
+    return next();
+  }
+  const ua = req.headers['user-agent'] || '';
+  // حجب الطلبات بدون User-Agent
+  if (!ua || ua.trim() === '') {
+    return res.status(403).send(BOT_BLOCK_HTML);
+  }
+  // فحص User-Agent ضد قائمة البوتات
+  const isBot = BOT_USER_AGENTS.some(pattern => pattern.test(ua));
+  if (isBot) {
+    return res.status(403).send(BOT_BLOCK_HTML);
+  }
+  next();
+});
+
 // ==================== Socket.io ====================
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
