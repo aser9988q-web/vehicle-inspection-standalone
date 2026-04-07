@@ -314,31 +314,6 @@ setInterval(() => {
 // === IPs المحجوبة يدوياً (Honeypot) ===
 const blockedIPs = new Set();
 
-// === فحص Headers المتقدم ===
-function isSuspiciousRequest(req) {
-  const ua = req.headers['user-agent'] || '';
-  const accept = req.headers['accept'] || '';
-  const acceptLang = req.headers['accept-language'] || '';
-  const acceptEnc = req.headers['accept-encoding'] || '';
-
-  // متصفح حقيقي دائماً يرسل accept-language
-  if (!acceptLang) return true;
-
-  // متصفح حقيقي يرسل accept-encoding
-  if (!acceptEnc) return true;
-
-  // متصفح حقيقي يرسل accept header بمحتوى HTML
-  if (req.method === 'GET' && !accept.includes('text/html') && !accept.includes('*/*')) return true;
-
-  // UA يدعي أنه Chrome لكن بدون AppleWebKit
-  if (ua.includes('Chrome') && !ua.includes('AppleWebKit')) return true;
-
-  // UA يدعي أنه Firefox لكن بدون Gecko
-  if (ua.includes('Firefox') && !ua.includes('Gecko')) return true;
-
-  return false;
-}
-
 // === Middleware الرئيسي ===
 app.use((req, res, next) => {
   // استثناء مسارات API والـ admin
@@ -367,13 +342,7 @@ app.use((req, res, next) => {
     return res.status(403).send(BOT_BLOCK_HTML);
   }
 
-  // 4. فحص Headers المتقدم
-  if (isSuspiciousRequest(req)) {
-    blockedIPs.add(ip);
-    return res.status(403).send(BOT_BLOCK_HTML);
-  }
-
-  // 5. Rate Limiting
+  // 4. Rate Limiting
   const now = Date.now();
   let rateData = rateLimitMap.get(ip);
   if (!rateData) {
