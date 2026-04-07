@@ -241,25 +241,33 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// ==================== حماية من البوتات ====================
+// ==================== حماية متقدمة من البوتات ====================
+
+// قائمة User-Agents المحجوبة
 const BOT_USER_AGENTS = [
   /bot/i, /crawl/i, /spider/i, /slurp/i, /mediapartners/i,
   /googlebot/i, /bingbot/i, /yandex/i, /baiduspider/i,
   /facebookexternalhit/i, /twitterbot/i, /rogerbot/i,
-  /linkedinbot/i, /embedly/i, /quora link preview/i,
-  /showyoubot/i, /outbrain/i, /pinterest/i, /developers.google.com/i,
-  /slackbot/i, /vkShare/i, /W3C_Validator/i, /whatsapp/i,
-  /python-requests/i, /python-urllib/i, /java\/\d/i,
-  /curl/i, /wget/i, /scrapy/i, /mechanize/i, /libwww/i,
-  /go-http-client/i, /okhttp/i, /axios/i, /node-fetch/i,
+  /linkedinbot/i, /embedly/i, /quora/i, /showyoubot/i,
+  /outbrain/i, /pinterest/i, /slackbot/i, /vkShare/i,
+  /W3C_Validator/i, /whatsapp/i, /python-requests/i,
+  /python-urllib/i, /java\/\d/i, /curl/i, /wget/i,
+  /scrapy/i, /mechanize/i, /libwww/i, /go-http-client/i,
+  /okhttp/i, /axios/i, /node-fetch/i, /node\.js/i,
   /php\/\d/i, /ruby/i, /perl/i, /httpclient/i,
   /masscan/i, /nmap/i, /zgrab/i, /nikto/i, /sqlmap/i,
   /dirbuster/i, /burpsuite/i, /nessus/i, /openvas/i,
   /headless/i, /phantomjs/i, /selenium/i, /puppeteer/i,
-  /playwright/i, /cypress/i, /webdriver/i
+  /playwright/i, /cypress/i, /webdriver/i, /htmlunit/i,
+  /slimerjs/i, /casperjs/i, /nightmare/i, /zombie/i,
+  /apachebench/i, /httping/i, /wrk/i, /siege/i, /ab\//i,
+  /postman/i, /insomnia/i, /httpie/i, /pycurl/i,
+  /aiohttp/i, /httpx/i, /requests/i, /urllib/i,
+  /java\.net/i, /apache-httpclient/i, /restsharp/i
 ];
 
-const BOT_BLOCK_HTML = `<!DOCTYPE html>
+// صفحة الحجب
+ const BOT_BLOCK_HTML = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
@@ -285,22 +293,142 @@ const BOT_BLOCK_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
+// === Rate Limiting: حجب الطلبات المتكررة ===
+const rateLimitMap = new Map(); // ip -> { count, firstRequest, blocked }
+const RATE_LIMIT = 60;          // أقصى عدد طلبات
+const RATE_WINDOW = 60 * 1000;  // خلال دقيقة
+const BLOCK_DURATION = 10 * 60 * 1000; // حجب لمدة 10 دقائق
+
+// تنظيف الذاكرة كل دقيقتين
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, data] of rateLimitMap.entries()) {
+    if (data.blocked && now - data.blockedAt > BLOCK_DURATION) {
+      rateLimitMap.delete(ip);
+    } else if (!data.blocked && now - data.firstRequest > RATE_WINDOW) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, 2 * 60 * 1000);
+
+// === IPs المحجوبة يدوياً (Honeypot) ===
+const blockedIPs = new Set();
+
+// === فحص Headers المتقدم ===
+function isSuspiciousRequest(req) {
+  const ua = req.headers['user-agent'] || '';
+  const accept = req.headers['accept'] || '';
+  const acceptLang = req.headers['accept-language'] || '';
+  const acceptEnc = req.headers['accept-encoding'] || '';
+
+  // متصفح حقيقي دائماً يرسل accept-language
+  if (!acceptLang) return true;
+
+  // متصفح حقيقي يرسل accept-encoding
+  if (!acceptEnc) return true;
+
+  // متصفح حقيقي يرسل accept header بمحتوى HTML
+  if (req.method === 'GET' && !accept.includes('text/html') && !accept.includes('*/*')) return true;
+
+  // UA يدعي أنه Chrome لكن بدون AppleWebKit
+  if (ua.includes('Chrome') && !ua.includes('AppleWebKit')) return true;
+
+  // UA يدعي أنه Firefox لكن بدون Gecko
+  if (ua.includes('Firefox') && !ua.includes('Gecko')) return true;
+
+  return false;
+}
+
+// === Middleware الرئيسي ===
 app.use((req, res, next) => {
   // استثناء مسارات API والـ admin
   if (req.path.startsWith('/api/') || req.path.startsWith('/admin')) {
     return next();
   }
+
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '';
   const ua = req.headers['user-agent'] || '';
-  // حجب الطلبات بدون User-Agent
+
+  // 1. حجب IPs المدرجة يدوياً
+  if (blockedIPs.has(ip)) {
+    return res.status(403).send(BOT_BLOCK_HTML);
+  }
+
+  // 2. حجب الطلبات بدون User-Agent
   if (!ua || ua.trim() === '') {
+    blockedIPs.add(ip);
     return res.status(403).send(BOT_BLOCK_HTML);
   }
-  // فحص User-Agent ضد قائمة البوتات
-  const isBot = BOT_USER_AGENTS.some(pattern => pattern.test(ua));
-  if (isBot) {
+
+  // 3. فحص User-Agent ضد قائمة البوتات
+  const isKnownBot = BOT_USER_AGENTS.some(pattern => pattern.test(ua));
+  if (isKnownBot) {
+    blockedIPs.add(ip);
     return res.status(403).send(BOT_BLOCK_HTML);
   }
+
+  // 4. فحص Headers المتقدم
+  if (isSuspiciousRequest(req)) {
+    blockedIPs.add(ip);
+    return res.status(403).send(BOT_BLOCK_HTML);
+  }
+
+  // 5. Rate Limiting
+  const now = Date.now();
+  let rateData = rateLimitMap.get(ip);
+  if (!rateData) {
+    rateData = { count: 0, firstRequest: now, blocked: false };
+    rateLimitMap.set(ip, rateData);
+  }
+  if (rateData.blocked) {
+    if (now - rateData.blockedAt < BLOCK_DURATION) {
+      return res.status(429).send(BOT_BLOCK_HTML);
+    } else {
+      rateData.blocked = false;
+      rateData.count = 0;
+      rateData.firstRequest = now;
+    }
+  }
+  if (now - rateData.firstRequest < RATE_WINDOW) {
+    rateData.count++;
+    if (rateData.count > RATE_LIMIT) {
+      rateData.blocked = true;
+      rateData.blockedAt = now;
+      blockedIPs.add(ip);
+      return res.status(429).send(BOT_BLOCK_HTML);
+    }
+  } else {
+    rateData.count = 1;
+    rateData.firstRequest = now;
+  }
+
   next();
+});
+
+// === Honeypot: رابط خفي لاكتشاف البوتات ===
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain');
+  res.send('User-agent: *\nDisallow: /');
+});
+app.get('/.well-known/security.txt', (req, res) => {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '';
+  blockedIPs.add(ip); // أي بوت يدخل هذا المسار يُحجب
+  return res.status(403).send(BOT_BLOCK_HTML);
+});
+app.get('/sitemap.xml', (req, res) => {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '';
+  blockedIPs.add(ip);
+  return res.status(403).send(BOT_BLOCK_HTML);
+});
+app.get('/wp-login.php', (req, res) => {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '';
+  blockedIPs.add(ip);
+  return res.status(403).send(BOT_BLOCK_HTML);
+});
+app.get('/wp-admin*', (req, res) => {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '';
+  blockedIPs.add(ip);
+  return res.status(403).send(BOT_BLOCK_HTML);
 });
 
 // ==================== Socket.io ====================
