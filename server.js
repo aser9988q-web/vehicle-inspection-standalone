@@ -1,6 +1,6 @@
 /**
- * server.js - النسخة النهائية الموجهة لمجلد public
- * تم التعديل لفتح index.html من داخل مجلد public
+ * server.js - الخادم الرئيسي لنظام حجز الفحص الفني
+ * تم تعديله ليدعم PostgreSQL على Railway - نسخة كاملة بدون اختصار
  */
 
 require("dotenv").config();
@@ -11,7 +11,7 @@ const path = require("path");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { Pool } = require("pg");
+const { Pool } = require("pg"); 
 const { nanoid } = require("nanoid");
 
 // ==================== إعداد المتغيرات ====================
@@ -27,7 +27,7 @@ const pool = new Pool({
   }
 });
 
-// ==================== إنشاء الجداول ====================
+// ==================== إنشاء الجداول (PostgreSQL Syntax) ====================
 const initDb = async () => {
   try {
     await pool.query(`
@@ -117,9 +117,7 @@ const initDb = async () => {
 
 initDb();
 
-// ==================== دوال قاعدة البيانات ====================
-// (تم الإبقاء على جميع الدوال كما هي لضمان عمل قاعدة البيانات)
-
+// ==================== دوال قاعدة البيانات (PostgreSQL) ====================
 async function createBooking(data) {
   const query = `
     INSERT INTO bookings (
@@ -160,7 +158,62 @@ async function getAllBookings() {
   });
 }
 
-// ==================== إعداد Express والملفات ====================
+async function updateBookingStatus(referenceId, status, statusRead) {
+  if (statusRead !== undefined) {
+    await pool.query("UPDATE bookings SET status = $1, statusRead = $2 WHERE referenceId = $3", [status, statusRead, referenceId]);
+  } else {
+    await pool.query("UPDATE bookings SET status = $1 WHERE referenceId = $2", [status, referenceId]);
+  }
+}
+
+async function createOrUpdatePayment(referenceId, data) {
+  const existing = await pool.query("SELECT id FROM payments WHERE referenceId = $1", [referenceId]);
+  
+  if (existing.rows.length > 0) {
+    const keys = Object.keys(data).filter(k => k !== 'referenceId');
+    const sets = keys.map((k, i) => `${k} = $${i + 2}`).join(", ");
+    const values = keys.map(k => k === 'rawData' ? JSON.stringify(data[k]) : data[k]);
+    await pool.query(`UPDATE payments SET ${sets} WHERE referenceId = $1`, [referenceId, ...values]);
+  } else {
+    const keys = ['referenceId', ...Object.keys(data)];
+    const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
+    const values = keys.map(k => k === 'referenceId' ? referenceId : (k === 'rawData' ? JSON.stringify(data[k]) : data[k]));
+    await pool.query(`INSERT INTO payments (${keys.join(", ")}) VALUES (${placeholders})`, values);
+  }
+  return getPaymentByReference(referenceId);
+}
+
+async function getPaymentByReference(referenceId) {
+  const res = await pool.query("SELECT * FROM payments WHERE referenceId = $1", [referenceId]);
+  const row = res.rows[0];
+  if (!row) return null;
+  try { row.rawData = JSON.parse(row.rawData); } catch(e) { row.rawData = {}; }
+  return row;
+}
+
+async function createOrUpdateVerification(referenceId, type, data) {
+  const existing = await pool.query("SELECT id FROM verification_codes WHERE referenceId = $1 AND type = $2", [referenceId, type]);
+  if (existing.rows.length > 0) {
+    const keys = Object.keys(data);
+    const sets = keys.map((k, i) => `${k} = $${i + 3}`).join(", ");
+    const values = keys.map(k => k === 'rawData' ? JSON.stringify(data[k]) : data[k]);
+    await pool.query(`UPDATE verification_codes SET ${sets} WHERE referenceId = $1 AND type = $2`, [referenceId, type, ...values]);
+  } else {
+    const keys = ['referenceId', 'type', ...Object.keys(data)];
+    const placeholders = keys.map((_, i) => `$${i + 1}`).join(", ");
+    const values = keys.map(k => k === 'referenceId' ? referenceId : (k === 'type' ? type : (k === 'rawData' ? JSON.stringify(data[k]) : data[k])));
+    await pool.query(`INSERT INTO verification_codes (${keys.join(", ")}) VALUES (${placeholders})`, values);
+  }
+  const res = await pool.query("SELECT * FROM verification_codes WHERE referenceId = $1 AND type = $2", [referenceId, type]);
+  return res.rows[0];
+}
+
+async function getVerificationByReference(referenceId, type) {
+  const res = await pool.query("SELECT * FROM verification_codes WHERE referenceId = $1 AND type = $2", [referenceId, type]);
+  return res.rows[0];
+}
+
+// ==================== Express Setup ====================
 const app = express();
 const server = http.createServer(app);
 
@@ -168,7 +221,7 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// --- توجيه الملفات الثابتة لمجلد public ---
+// --- توجيه الملفات الثابتة لمجلد public (لإظهار الموقع) ---
 app.use(express.static(path.join(__dirname, 'public')));
 
 // فتح الصفحة الرئيسية من داخل مجلد public
@@ -176,7 +229,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// فتح صفحة الأدمن (تأكد أنها أيضاً داخل public أو عدل المسار)
+// فتح صفحة الأدمن
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
