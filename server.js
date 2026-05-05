@@ -1,6 +1,6 @@
 /**
- * server.js - النسخة النهائية والشاملة
- * تم إضافة دعم الملفات الثابتة وتوجيه المسارات بدقة
+ * server.js - النسخة النهائية الموجهة لمجلد public
+ * تم التعديل لفتح index.html من داخل مجلد public
  */
 
 require("dotenv").config();
@@ -15,7 +15,7 @@ const { Pool } = require("pg");
 const { nanoid } = require("nanoid");
 
 // ==================== إعداد المتغيرات ====================
-const PORT = process.env.PORT || 8080; // التوافق مع بورت Railway
+const PORT = process.env.PORT || 8080; 
 const JWT_SECRET = process.env.JWT_SECRET || "vehicle-inspection-secret-2024";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin@2024";
 
@@ -118,6 +118,8 @@ const initDb = async () => {
 initDb();
 
 // ==================== دوال قاعدة البيانات ====================
+// (تم الإبقاء على جميع الدوال كما هي لضمان عمل قاعدة البيانات)
+
 async function createBooking(data) {
   const query = `
     INSERT INTO bookings (
@@ -158,8 +160,6 @@ async function getAllBookings() {
   });
 }
 
-// ... (باقي الدوال كما هي) ...
-
 // ==================== إعداد Express والملفات ====================
 const app = express();
 const server = http.createServer(app);
@@ -168,30 +168,18 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// --- الحل الجوهري لمشكلة Not Found ---
-
-// 1. جعل السيرفر يقرأ من المجلد الرئيسي ومن مجلد public لو موجود
-app.use(express.static(__dirname));
+// --- توجيه الملفات الثابتة لمجلد public ---
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 2. دالة ذكية لإرسال الملف (تبحث عنه في كل مكان)
-const sendFileSafe = (fileName, res) => {
-    const pathsToTry = [
-        path.join(__dirname, fileName),
-        path.join(__dirname, 'public', fileName)
-    ];
-    
-    for (const p of pathsToTry) {
-        if (require('fs').existsSync(p)) {
-            return res.sendFile(p);
-        }
-    }
-    res.status(404).send("File Not Found on Server");
-};
+// فتح الصفحة الرئيسية من داخل مجلد public
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
-// 3. توجيه الطلبات
-app.get('/', (req, res) => sendFileSafe('index.html', res));
-app.get('/admin', (req, res) => sendFileSafe('admin.html', res));
+// فتح صفحة الأدمن (تأكد أنها أيضاً داخل public أو عدل المسار)
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
 
 // ==================== تشغيل السيرفر ====================
 server.listen(PORT, () => {
