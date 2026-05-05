@@ -1,6 +1,7 @@
 {
   "name": "vehicle-inspection-system",
   "version": "1.0.0",
+  "description": "نظام حجز مواعيد الفحص الفني للمركبات",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
