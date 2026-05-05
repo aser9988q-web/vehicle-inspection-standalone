@@ -15,6 +15,7 @@ const { Pool } = require("pg"); // تم التغيير من better-sqlite3 إل�
 const { nanoid } = require("nanoid");
 
 // ==================== إعداد المتغيرات ====================
+// تعديل: نستخدم process.env.PORT ليعمل على Railway بشكل صحيح
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "vehicle-inspection-secret-2024";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin@2024";
@@ -213,7 +214,7 @@ async function getVerificationByReference(referenceId, type) {
   return res.rows[0];
 }
 
-// ==================== Express & Bot Protection (باقي الكود كما هو) ====================
+// ==================== Express Setup ====================
 const app = express();
 const server = http.createServer(app);
 
@@ -221,13 +222,21 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// ... (هنا تضع كود BOT_USER_AGENTS و BOT_BLOCK_HTML من ملفك الأصلي) ...
-// ... (هنا تضع كود Socket.io و API Routes مع التأكد من إضافة await قبل دوال قاعدة البيانات) ...
+// --- السطور المضافة لفتح الموقع وعرض الملفات ---
+// هذا السطر يجعل السيرفر يقرأ ملفات الـ HTML والـ CSS والصور
+app.use(express.static(path.join(__dirname))); 
 
-// ملاحظة: عند استدعاء أي دالة قاعدة بيانات داخل Socket.io أو الـ Routes 
-// لازم تتأكد إنك بتستخدم await لأن Postgres بتشتغل بشكل Async.
-// مثال: await createBooking(data);
+// فتح الصفحة الرئيسية index.html عند طلب الرابط
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
+// فتح صفحة الأدمن عند طلب /admin
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
+// ==================== تشغيل السيرفر ====================
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
